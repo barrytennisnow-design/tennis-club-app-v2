@@ -25,13 +25,15 @@ export default function MyMatchesPage() {
 
     if (p) {
       // Drafts are manager-only working state -- players never see
-      // them until the manager clicks "Propose."
+      // them until the manager clicks "Propose." Filtered in JS
+      // rather than in the query itself, to avoid relying on
+      // embedded-resource filter syntax.
       const { data: mp } = await supabase
         .from("match_players")
         .select("id, response_status, decline_reason, matches!inner(id, match_date, time_slot, status, court:courts(name)), match_id")
-        .eq("player_id", p.id)
-        .neq("matches.status", "draft");
-      setMyMatches(mp ?? []);
+        .eq("player_id", p.id);
+      const nonDraftMatches = (mp ?? []).filter((row: any) => row.matches?.status !== "draft");
+      setMyMatches(nonDraftMatches);
     }
     setLoading(false);
   }

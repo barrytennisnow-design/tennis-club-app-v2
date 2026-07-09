@@ -1,5 +1,6 @@
 import "./globals.css";
 import Link from "next/link";
+import ImpersonationBanner from "@/components/ImpersonationBanner";
 
 export const metadata = {
   title: "Club Tennis",
@@ -10,6 +11,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
   return (
     <html lang="en">
       <body>
+        <ImpersonationBanner />
         <header className="border-b border-stone-200 bg-white">
           <div className="mx-auto flex max-w-4xl items-center justify-between px-4 py-3">
             <Link href="/" className="text-lg font-semibold text-court-green">
