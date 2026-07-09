@@ -13,6 +13,7 @@
 
 import { NextResponse } from "next/server";
 import { createClient, createAdminClient } from "@/lib/supabaseServer";
+import { ensurePlayerAuthLinked } from "@/lib/linkPlayerAuth";
 
 export async function GET(request: Request, { params }: { params: { token: string } }) {
   const { origin } = new URL(request.url);
@@ -50,6 +51,8 @@ export async function GET(request: Request, { params }: { params: { token: strin
   if (verifyError) {
     return NextResponse.redirect(`${origin}/?error=verify_failed`);
   }
+
+  await ensurePlayerAuthLinked(admin, player.id, linkData.user.id);
 
   return NextResponse.redirect(`${origin}/profile`);
 }

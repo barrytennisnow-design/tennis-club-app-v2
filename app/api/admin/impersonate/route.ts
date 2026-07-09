@@ -8,6 +8,7 @@ import { NextResponse } from "next/server";
 import { cookies } from "next/headers";
 import { createClient, createAdminClient } from "@/lib/supabaseServer";
 import { IMPERSONATOR_COOKIE } from "@/lib/impersonation";
+import { ensurePlayerAuthLinked } from "@/lib/linkPlayerAuth";
 
 export async function POST(request: Request) {
   const { player_id } = await request.json();
@@ -54,6 +55,8 @@ export async function POST(request: Request) {
   if (verifyError) {
     return NextResponse.json({ error: verifyError.message }, { status: 500 });
   }
+
+  await ensurePlayerAuthLinked(admin, target.id, linkData.user.id);
 
   // Remember who the real manager was, so we can switch back later
   // without needing another email round-trip.

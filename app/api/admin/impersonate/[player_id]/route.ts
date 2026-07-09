@@ -8,6 +8,7 @@ import { NextResponse } from "next/server";
 import { cookies } from "next/headers";
 import { createClient, createAdminClient } from "@/lib/supabaseServer";
 import { IMPERSONATOR_COOKIE } from "@/lib/impersonation";
+import { ensurePlayerAuthLinked } from "@/lib/linkPlayerAuth";
 
 export async function GET(request: Request, { params }: { params: { player_id: string } }) {
   const { origin } = new URL(request.url);
@@ -56,6 +57,8 @@ export async function GET(request: Request, { params }: { params: { player_id: s
   if (verifyError) {
     return NextResponse.redirect(`${origin}/admin/roster?error=verify_failed`);
   }
+
+  await ensurePlayerAuthLinked(admin, target.id, linkData.user.id);
 
   cookies().set(IMPERSONATOR_COOKIE, me.email, {
     httpOnly: true,
