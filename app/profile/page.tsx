@@ -9,6 +9,27 @@ export default function ProfilePage() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
+  const [passkeySupported, setPasskeySupported] = useState(false);
+  const [passkeyStatus, setPasskeyStatus] = useState<"idle" | "registering" | "done" | "error">("idle");
+  const [passkeyError, setPasskeyError] = useState("");
+
+  useEffect(() => {
+    setPasskeySupported(typeof window !== "undefined" && !!window.PublicKeyCredential);
+  }, []);
+
+  async function registerPasskey() {
+    setPasskeyStatus("registering");
+    setPasskeyError("");
+    try {
+      // @ts-ignore -- experimental API, may not be in installed type defs yet
+      const { error } = await supabase.auth.registerPasskey();
+      if (error) throw error;
+      setPasskeyStatus("done");
+    } catch (err: any) {
+      setPasskeyStatus("error");
+      setPasskeyError(err?.message || "Couldn't set up a passkey on this device.");
+    }
+  }
 
   useEffect(() => {
     (async () => {
@@ -133,6 +154,26 @@ export default function ProfilePage() {
         {saving ? "Saving..." : "Save changes"}
       </button>
       {saved && <p className="text-green-700">Saved!</p>}
+
+      {player.status === "active" && passkeySupported && (
+        <div className="rounded-md border border-court-green/30 bg-court-green/5 p-4">
+          <p className="font-medium">🔒 Faster login</p>
+          <p className="mt-1 text-sm text-stone-600">
+            Set up Face ID, fingerprint, or your device PIN so you can log in
+            instantly next time — no email needed on this device.
+          </p>
+          <button
+            type="button"
+            onClick={registerPasskey}
+            disabled={passkeyStatus === "registering" || passkeyStatus === "done"}
+            className="mt-2 rounded-md bg-court-green px-4 py-2 text-sm text-white disabled:opacity-50"
+          >
+            {passkeyStatus === "registering" ? "Follow the prompt on your device..." :
+             passkeyStatus === "done" ? "Passkey set up ✓" : "Set up Passkey"}
+          </button>
+          {passkeyStatus === "error" && <p className="mt-1 text-sm text-red-600">{passkeyError}</p>}
+        </div>
+      )}
 
       {player.status === "active" && (
         <p className="text-sm">
