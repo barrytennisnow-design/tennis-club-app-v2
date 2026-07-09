@@ -1,12 +1,10 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabaseClient";
 
 export default function RosterPage() {
   const supabase = createClient();
-  const router = useRouter();
   const [players, setPlayers] = useState<any[]>([]);
   const [filter, setFilter] = useState<"all" | "active" | "paused" | "pending" | "declined">("active");
   const [busyId, setBusyId] = useState<string | null>(null);
@@ -37,24 +35,6 @@ export default function RosterPage() {
     const json = await res.json();
     setBusyId(null);
     setMessage(json.ok ? `Access link sent (${json.emailStatus}). Link: ${json.accessUrl}` : `Error: ${json.error}`);
-  }
-
-  async function logInAs(id: string) {
-    if (!confirm("This will switch YOUR browser session to this player, for testing. You'll need to log back in as manager afterward. Continue?")) return;
-    setBusyId(id);
-    setMessage(null);
-    const res = await fetch("/api/admin/impersonate", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ player_id: id }),
-    });
-    const json = await res.json();
-    setBusyId(null);
-    if (json.ok) {
-      router.push("/profile");
-    } else {
-      setMessage(`Error: ${json.error}`);
-    }
   }
 
   const filtered = filter === "all" ? players : players.filter((p) => p.status === filter);
@@ -103,10 +83,12 @@ export default function RosterPage() {
                   className="text-blue-600 underline disabled:opacity-50">
                   Send access link
                 </button>
-                <button disabled={busyId === p.id} onClick={() => logInAs(p.id)}
-                  className="text-purple-600 underline disabled:opacity-50">
+                <a
+                  href={`/api/admin/impersonate/${p.id}`}
+                  className="text-purple-600 underline"
+                >
                   Log in as (test)
-                </button>
+                </a>
               </td>
             </tr>
           ))}
