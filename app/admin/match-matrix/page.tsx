@@ -9,7 +9,6 @@ export default function MatchMatrixPage() {
   const [generating, setGenerating] = useState(false);
 
   async function loadSettings() {
-    // Fetches the default court and time from your new app_settings table
     const { data } = await supabase.from("app_settings").select("*");
     if (data) {
       const court = data.find(s => s.setting_key === 'default_court')?.setting_value || "TBD";
@@ -26,7 +25,6 @@ export default function MatchMatrixPage() {
     <div className="p-6 space-y-6">
       <h1 className="text-2xl font-bold">Match Matrix</h1>
 
-      {/* Button moved to the top of the page */}
       <div className="p-4 border rounded bg-stone-50">
         <button 
           onClick={() => alert("Generate logic will be updated next!")} 
@@ -38,8 +36,6 @@ export default function MatchMatrixPage() {
           Default Court: {defaults.court} | Default Time: {defaults.time}
         </div>
       </div>
-
-      {/* The existing match grid will continue to live below this */}
     </div>
   );
 }
