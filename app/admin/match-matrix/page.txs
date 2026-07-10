@@ -24,13 +24,6 @@ export default function MatchMatrixPage() {
     setMatches(mData ?? []);
   }
 
-  // Handle clicking a player
-  function handlePlayerClick(player: any) {
-    const action = prompt(`Actions for ${player.first_name}:\n1: Swap\n2: Assign Court`);
-    if (action === '1') alert("Swap logic trigger");
-    if (action === '2') alert("Assign Court logic trigger");
-  }
-
   useEffect(() => { load(); }, []);
 
   return (
@@ -51,7 +44,7 @@ export default function MatchMatrixPage() {
           <thead className="bg-stone-100 text-left">
             <tr>
               <th className="p-2">Match Date</th>
-              <th className="p-2">Players (Click to Manage)</th>
+              <th className="p-2">Players</th>
             </tr>
           </thead>
           <tbody>
@@ -60,13 +53,9 @@ export default function MatchMatrixPage() {
                 <td className="p-2 font-mono">{m.match_date}</td>
                 <td className="p-2 flex gap-2">
                   {m.match_players.map((mp: any) => (
-                    <button 
-                      key={mp.player_id} 
-                      onClick={() => handlePlayerClick(mp.players)}
-                      className="bg-blue-50 p-2 rounded cursor-pointer hover:bg-blue-200 border"
-                    >
+                    <span key={mp.player_id} className="bg-stone-100 p-1 rounded">
                       {mp.players.first_name}
-                    </button>
+                    </span>
                   ))}
                 </td>
               </tr>
