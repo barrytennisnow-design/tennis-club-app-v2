@@ -67,6 +67,7 @@ export default function AdminHome() {
       <div className="flex gap-4 text-sm">
         <Link href="/admin/roster" className="underline text-court-green">Full Roster</Link>
         <Link href="/admin/matches" className="underline text-court-green">Matches</Link>
+        <Link href="/admin/grid" className="underline text-court-green">Match Grid</Link>
       </div>
 
       <div>

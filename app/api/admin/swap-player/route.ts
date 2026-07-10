@@ -17,10 +17,28 @@ export async function POST(request: Request) {
 
   const admin = createAdminClient();
 
-  const { data: match } = await admin.from("matches").select("id, status").eq("id", match_id).single();
+  const { data: match } = await admin.from("matches").select("id, status, match_date, time_slot").eq("id", match_id).single();
   if (!match) return NextResponse.json({ error: "Match not found" }, { status: 404 });
   if (match.status !== "draft") {
     return NextResponse.json({ error: "Can only swap players on a draft match" }, { status: 400 });
+  }
+
+  // Prevent double-booking: the incoming player must not already be
+  // in ANY other match (draft, proposed, or confirmed) that same
+  // day/time-slot.
+  const { data: conflicting } = await admin
+    .from("match_players")
+    .select("id, matches!inner(match_date, time_slot, status)")
+    .eq("player_id", new_player_id)
+    .eq("matches.match_date", match.match_date)
+    .eq("matches.time_slot", match.time_slot)
+    .neq("matches.status", "cancelled");
+
+  if (conflicting && conflicting.length > 0) {
+    return NextResponse.json(
+      { error: "That player is already in another match that day" },
+      { status: 400 }
+    );
   }
 
   const { error: deleteError } = await admin

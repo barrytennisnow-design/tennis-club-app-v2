@@ -45,11 +45,18 @@ export default function AdminMatchesPage() {
     }
     setAvailabilityByDay(byDay);
 
-    // Players already locked into a PROPOSED or CONFIRMED match that
-    // day/time -- they shouldn't be offered as swap candidates even
-    // if they marked themselves available.
-    const { data: lockedRows } = await supabase.from("locked_availability").select("player_id, date, time_slot");
-    setLockedSet(new Set((lockedRows ?? []).map((r: any) => `${r.player_id}_${r.date}_${r.time_slot}`)));
+    // Players already busy that day/time in ANY match that isn't
+    // cancelled -- draft, proposed, OR confirmed. This is what fixes
+    // the double-booking bug: a player can't be swapped into a
+    // second match on a day they're already drafted/proposed for.
+    const busy = new Set<string>();
+    for (const m of data ?? []) {
+      if (m.status === "cancelled") continue;
+      for (const mp of m.match_players) {
+        busy.add(`${mp.player_id}_${m.match_date}_${m.time_slot}`);
+      }
+    }
+    setLockedSet(busy);
   }
 
   useEffect(() => {
@@ -88,11 +95,16 @@ export default function AdminMatchesPage() {
     const key = `${matchId}_${oldPlayerId}`;
     const newPlayerId = swapTarget[key];
     if (!newPlayerId) return;
-    await fetch("/api/admin/swap-player", {
+    const res = await fetch("/api/admin/swap-player", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ match_id: matchId, old_player_id: oldPlayerId, new_player_id: newPlayerId }),
     });
+    const json = await res.json();
+    if (!json.ok) {
+      alert(`Couldn't swap: ${json.error}`);
+      return;
+    }
     load();
   }
 
@@ -153,6 +165,76 @@ export default function AdminMatchesPage() {
         </div>
         {lastResult && <p className="text-sm text-stone-600">{lastResult}</p>}
       </div>
+
+      {/* Tracking table -- matches your old "Proposed Matches" tab: one
+          row per match, all 4 players + status in one glance, color
+          coded. Read-only overview; use the detail cards below to
+          actually act on a match (Propose/Cancel/swap/court). */}
+      <div className="overflow-x-auto rounded-md border">
+        <table className="w-full min-w-[900px] text-xs">
+          <thead className="bg-stone-100 text-left text-stone-600">
+            <tr>
+              <th className="p-2">Match</th>
+              <th className="p-2">Day</th>
+              <th className="p-2">Time</th>
+              <th className="p-2">Court</th>
+              <th className="p-2">Player 1</th>
+              <th className="p-2">Player 2</th>
+              <th className="p-2">Player 3</th>
+              <th className="p-2">Player 4</th>
+              <th className="p-2">Status</th>
+              <th className="p-2">Proposed</th>
+              <th className="p-2">Confirmed</th>
+              <th className="p-2">Cancelled</th>
+            </tr>
+          </thead>
+          <tbody>
+            {matches.map((m) => {
+              const rowColor =
+                m.status === "confirmed" ? "bg-green-50" :
+                m.status === "proposed" ? "bg-yellow-50" :
+                m.status === "cancelled" ? "bg-red-50" :
+                "bg-stone-50";
+              const players = [0, 1, 2, 3].map((i) => m.match_players[i]);
+              return (
+                <tr key={m.id} className={`border-t ${rowColor}`}>
+                  <td className="p-2 font-mono">M{m.id.slice(0, 4)}</td>
+                  <td className="p-2">{m.match_date}</td>
+                  <td className="p-2">{m.time_slot}</td>
+                  <td className="p-2">{m.court?.name ?? "TBD"}</td>
+                  {players.map((mp: any, i: number) => (
+                    <td key={i} className="p-2">
+                      {mp ? (
+                        <>
+                          {mp.players.first_name} {mp.players.last_name}
+                          {m.status !== "draft" && (
+                            <span className="text-stone-400"> : {mp.response_status.toUpperCase()}</span>
+                          )}
+                        </>
+                      ) : (
+                        "—"
+                      )}
+                    </td>
+                  ))}
+                  <td className="p-2">
+                    <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${statusStyles[m.status]}`}>
+                      {m.status.toUpperCase()}
+                    </span>
+                  </td>
+                  <td className="p-2">{m.proposed_at ? new Date(m.proposed_at).toLocaleString() : "—"}</td>
+                  <td className="p-2">{m.confirmed_at ? new Date(m.confirmed_at).toLocaleString() : "—"}</td>
+                  <td className="p-2">{m.cancelled_at ? new Date(m.cancelled_at).toLocaleString() : "—"}</td>
+                </tr>
+              );
+            })}
+            {matches.length === 0 && (
+              <tr><td colSpan={12} className="p-4 text-center text-stone-400">No matches yet.</td></tr>
+            )}
+          </tbody>
+        </table>
+      </div>
+
+      <h2 className="text-lg font-semibold">Manage matches</h2>
 
       <div className="space-y-3">
         {matches.map((m) => {
