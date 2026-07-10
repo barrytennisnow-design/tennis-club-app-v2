@@ -7,10 +7,8 @@ export default function MatchMatrixPage() {
   const supabase = createClient();
   const [matches, setMatches] = useState<any[]>([]);
   const [defaults, setDefaults] = useState({ court: "", time: "" });
-  const [generating, setGenerating] = useState(false);
 
   async function load() {
-    // Fetch settings
     const { data: sData } = await supabase.from("app_settings").select("*");
     if (sData) {
       setDefaults({
@@ -19,12 +17,18 @@ export default function MatchMatrixPage() {
       });
     }
 
-    // Fetch matches
     const { data: mData } = await supabase
       .from("matches")
-      .select("*, court:courts(id, name), match_players(player_id, players(first_name, last_name))")
+      .select("*, match_players(player_id, players(first_name, last_name))")
       .order("match_date", { ascending: true });
     setMatches(mData ?? []);
+  }
+
+  // Handle clicking a player
+  function handlePlayerClick(player: any) {
+    const action = prompt(`Actions for ${player.first_name}:\n1: Swap\n2: Assign Court`);
+    if (action === '1') alert("Swap logic trigger");
+    if (action === '2') alert("Assign Court logic trigger");
   }
 
   useEffect(() => { load(); }, []);
@@ -47,7 +51,7 @@ export default function MatchMatrixPage() {
           <thead className="bg-stone-100 text-left">
             <tr>
               <th className="p-2">Match Date</th>
-              <th className="p-2">Players</th>
+              <th className="p-2">Players (Click to Manage)</th>
             </tr>
           </thead>
           <tbody>
@@ -56,9 +60,13 @@ export default function MatchMatrixPage() {
                 <td className="p-2 font-mono">{m.match_date}</td>
                 <td className="p-2 flex gap-2">
                   {m.match_players.map((mp: any) => (
-                    <div key={mp.player_id} className="bg-blue-50 p-2 rounded cursor-pointer hover:bg-blue-100">
+                    <button 
+                      key={mp.player_id} 
+                      onClick={() => handlePlayerClick(mp.players)}
+                      className="bg-blue-50 p-2 rounded cursor-pointer hover:bg-blue-200 border"
+                    >
                       {mp.players.first_name}
-                    </div>
+                    </button>
                   ))}
                 </td>
               </tr>
