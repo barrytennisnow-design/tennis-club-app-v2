@@ -3,199 +3,163 @@
 import { useEffect, useState } from "react";
 import { createClient } from "@/lib/supabaseClient";
 
+// Display text for each time slot -- matches the warmup/start-play
+// format from the old system. Keep in sync with lib/ics.ts's actual
+// start/end times used for calendar invites.
+const TIME_SLOT_DISPLAY: Record<string, string> = {
+  morning: "8:00am warmup, 8:15am start play",
+};
+
+function formatLongDate(dateStr: string) {
+  // 'YYYY-MM-DD' -> 'Saturday, 7/11/2026'
+  const d = new Date(dateStr + "T00:00:00");
+  const weekday = d.toLocaleDateString(undefined, { weekday: "long" });
+  const short = d.toLocaleDateString(undefined, { month: "numeric", day: "numeric", year: "numeric" });
+  return `${weekday}, ${short}`;
+}
+
 export default function MyMatchesPage() {
   const supabase = createClient();
   const [player, setPlayer] = useState<any>(null);
   const [myMatches, setMyMatches] = useState<any[]>([]);
   const [rosterByMatch, setRosterByMatch] = useState<Record<string, any[]>>({});
   const [loading, setLoading] = useState(true);
-  const [dbError, setDbError] = useState<string | null>(null);
+  const [busyId, setBusyId] = useState<string | null>(null);
 
   async function load() {
-    setDbError(null);
-    
-    // 1. Get logged-in user
-    const { data: userData, error: authError } = await supabase.auth.getUser();
-    if (authError || !userData?.user) {
+    const { data: userData } = await supabase.auth.getUser();
+    if (!userData.user) {
       setLoading(false);
       return;
     }
-
-    // 2. Find player profile
-    const { data: p, error: playerError } = await supabase
+    const { data: p } = await supabase
       .from("players")
       .select("*")
       .eq("auth_user_id", userData.user.id)
-      .maybeSingle();
-    
-    if (playerError) {
-      setDbError("Error loading player profile: " + playerError.message);
-      setLoading(false);
-      return;
-    }
-    
+      .single();
     setPlayer(p);
 
     if (p) {
-      // 3. Get match assignments
-      const { data: assignments, error: assignError } = await supabase
+      const { data: mp } = await supabase
         .from("match_players")
-        .select("match_id")
+        .select("id, response_status, decline_reason, match_id, matches!inner(id, match_date, time_slot, status, proposed_at, confirmed_at, cancelled_at, auto_cancel_hours, nudge_count, court:courts(name))")
         .eq("player_id", p.id);
+      const nonDraftMatches = (mp ?? []).filter((row: any) => row.matches?.status !== "draft");
+      // Most recent / soonest first, matching the old system's list
+      nonDraftMatches.sort((a: any, b: any) => a.matches.match_date.localeCompare(b.matches.match_date));
+      setMyMatches(nonDraftMatches);
 
-      if (assignError) {
-        setDbError("Error loading match links: " + assignError.message);
-        setLoading(false);
-        return;
-      }
-
-      if (assignments && assignments.length > 0) {
-        const matchIds = assignments.map(a => a.match_id);
-        
-        // 4. Fetch match details
-        const { data: matches, error: matchesError } = await supabase
-          .from("matches")
-          .select("*")
-          .in("id", matchIds);
-
-        if (matchesError) {
-          setDbError("Error loading matches: " + matchesError.message);
-          setLoading(false);
-          return;
-        }
-
-        setMyMatches(matches || []);
-
-        // 5. Fetch entire rosters for these matches
-        const { data: allRosters, error: rosterError } = await supabase
+      const matchIds = nonDraftMatches.map((row: any) => row.match_id);
+      if (matchIds.length > 0) {
+        const { data: allRoster } = await supabase
           .from("match_players")
-          .select("*, players(first_name, last_name, phone)")
+          .select("match_id, response_status, players(first_name, last_name, phone)")
           .in("match_id", matchIds);
-
-        if (rosterError) {
-          setDbError("Error loading roster details: " + rosterError.message);
-          setLoading(false);
-          return;
-        }
-
         const grouped: Record<string, any[]> = {};
-        allRosters?.forEach(r => {
-          if (!grouped[r.match_id]) grouped[r.match_id] = [];
-          grouped[r.match_id].push({
-            player_id: r.player_id,
-            first_name: r.players?.first_name,
-            last_name: r.players?.last_name,
-            phone: r.players?.phone,
-            response_status: r.response_status
-          });
-        });
+        for (const row of allRoster ?? []) {
+          if (!grouped[row.match_id]) grouped[row.match_id] = [];
+          grouped[row.match_id].push(row);
+        }
         setRosterByMatch(grouped);
       }
     }
     setLoading(false);
   }
 
-  async function handleStatusChange(matchId: string, newStatus: string) {
-    if (!player) return;
-    const { error } = await supabase
-      .from("match_players")
-      .update({ response_status: newStatus.toLowerCase() })
-      .eq("match_id", matchId)
-      .eq("player_id", player.id);
-      
-    if (error) {
-      alert("Could not update status: " + error.message);
-    } else {
-      await load();
-    }
-  }
-
   useEffect(() => {
     load();
   }, []);
 
-  if (loading) {
-    return <div className="p-6 font-mono text-gray-600">Loading your matches...</div>;
+  async function respond(matchPlayerId: string, response: "accepted" | "declined") {
+    let declineReason: string | null = null;
+    if (response === "declined") {
+      declineReason = window.prompt("Optional: let the group know why you're declining") || null;
+    }
+    setBusyId(matchPlayerId);
+    await fetch("/api/respond-match", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ match_player_id: matchPlayerId, response, decline_reason: declineReason }),
+    });
+    setBusyId(null);
+    load();
   }
 
+  if (loading) return <p>Loading...</p>;
+  if (!player) return <p>Please <a href="/login" className="underline">log in</a>.</p>;
+
   return (
-    <div className="max-w-2xl mx-auto p-6 font-mono text-black bg-white selection:bg-gray-200">
-      <h1 className="text-2xl font-bold mb-6">Your Matches</h1>
+    <div className="space-y-6">
+      <h1 className="text-xl font-bold">Your Matches</h1>
+      {myMatches.length === 0 && <p className="text-stone-500">No match invites yet.</p>}
 
-      {dbError && (
-        <div className="mb-6 p-4 border border-rose-300 bg-rose-50 text-rose-900 rounded font-sans text-sm">
-          <strong>Database Error Details:</strong> {dbError}
-        </div>
-      )}
+      {myMatches.map((mp) => {
+        const roster = rosterByMatch[mp.match_id] ?? [];
+        const deadline = mp.matches.proposed_at && mp.matches.auto_cancel_hours
+          ? new Date(new Date(mp.matches.proposed_at).getTime() + mp.matches.auto_cancel_hours * 3600000)
+          : null;
 
-      {myMatches.length === 0 ? (
-        <div className="space-y-4 text-gray-600">
-          <p>No matches scheduled at this time.</p>
-          {!dbError && (
-            <div className="text-xs border border-amber-200 bg-amber-50 p-3 rounded text-amber-900 font-sans leading-relaxed">
-              <strong>Connection Verified:</strong> Your player profile links perfectly to your database assignments. If you still see this, double-check that your active local login session is running under the same account, or check your Supabase Row Level Security (RLS) settings for the <code>matches</code> table.
+        return (
+          <div key={mp.id} className="rounded-md border p-4">
+            <p className="font-semibold">
+              Match ID: M{mp.matches.id.slice(0, 4).toUpperCase()}{" "}
+              <span className={
+                mp.matches.status === "confirmed" ? "text-green-700" :
+                mp.matches.status === "cancelled" ? "text-red-700" :
+                "text-yellow-700"
+              }>
+                {mp.matches.status.toUpperCase()}
+              </span>
+            </p>
+            <p>Court: {mp.matches.court?.name ?? "TBD"}</p>
+            <p>
+              Date &amp; Time: {formatLongDate(mp.matches.match_date)} at{" "}
+              {TIME_SLOT_DISPLAY[mp.matches.time_slot] ?? mp.matches.time_slot}
+            </p>
+
+            <p className="mt-3 font-medium">Players:</p>
+            <ul className="ml-4 list-disc space-y-0.5">
+              {roster.map((r: any, i: number) => (
+                <li key={i}>
+                  {r.players.first_name} {r.players.last_name}{" "}
+                  Status: <strong>{r.response_status.toUpperCase()}</strong>
+                  {r.players.phone && <> | Phone: {r.players.phone}</>}
+                </li>
+              ))}
+            </ul>
+
+            {mp.decline_reason && (
+              <p className="mt-2 text-sm italic text-stone-500">Your reason: "{mp.decline_reason}"</p>
+            )}
+
+            <div className="mt-2 text-xs text-stone-400">
+              {mp.matches.proposed_at && <span>Proposed: {new Date(mp.matches.proposed_at).toLocaleString()}</span>}
+              {deadline && mp.matches.status === "proposed" && (
+                <span className="ml-3">Respond by: {deadline.toLocaleString()}</span>
+              )}
+              {mp.matches.confirmed_at && <span className="ml-3">Confirmed: {new Date(mp.matches.confirmed_at).toLocaleString()}</span>}
+              {mp.matches.cancelled_at && <span className="ml-3">Cancelled: {new Date(mp.matches.cancelled_at).toLocaleString()}</span>}
+              {mp.matches.nudge_count > 0 && <span className="ml-3">Nudges sent: {mp.matches.nudge_count}</span>}
             </div>
-          )}
-        </div>
-      ) : (
-        <div className="space-y-10">
-          {myMatches.map((match) => {
-            const players = rosterByMatch[match.id] || [];
-            const currentPlayerRosterItem = players.find(p => p.player_id === player?.id);
-            const currentPlayerStatus = currentPlayerRosterItem?.response_status || "proposed";
-            
-            const isMatchConfirmed = match.status?.toUpperCase() === "CONFIRMED";
-            const currentStatusUpper = currentPlayerStatus.toUpperCase();
-            const needsAction = !isMatchConfirmed && (currentStatusUpper === "PROPOSED" || currentStatusUpper === "PENDING");
 
-            return (
-              <div key={match.id} className="border-b border-gray-300 pb-8 last:border-none">
-                <div className="font-bold">
-                  Match ID: {match.match_number || match.id} <span className="uppercase">{match.status}</span>
-                </div>
-                <div>
-                  Court: {match.court_name || match.court || "TBD"}
-                </div>
-                <div>
-                  Date & Time: {match.date_time || `${match.date} at ${match.time}`}
-                </div>
-                
-                <div className="mt-2">Players:</div>
-                <ul className="list-none pl-0 my-1 space-y-1">
-                  {players.map((p, idx) => (
-                    <li key={idx} className="whitespace-pre-wrap">
-                      * {p.first_name} {p.last_name} Status: <span className="uppercase font-semibold">{p.response_status || "PROPOSED"}</span> | Phone: {p.phone || "N/A"}
-                    </li>
-                  ))}
-                </ul>
-
-                {needsAction && (
-                  <div className="mt-4 flex gap-4 font-sans">
-                    <button
-                      onClick={() => handleStatusChange(match.id, "accepted")}
-                      className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold py-1 px-4 rounded text-sm transition-colors"
-                    >
-                      Accept Match
-                    </button>
-                    <button
-                      onClick={() => handleStatusChange(match.id, "disabled")}
-                      className="bg-rose-600 hover:bg-rose-700 text-white font-bold py-1 px-4 rounded text-sm transition-colors"
-                    >
-                      Decline Match
-                    </button>
-                  </div>
-                )}
-
-                {isMatchConfirmed && (
-                  <div className="mt-4 text-sm font-sans text-gray-800 leading-relaxed bg-gray-50 border-l-4 border-amber-500 p-3 italic">
-                    If you can not make it to a confirmed match please contact the other players in the match to cancel the match or arrange a sub player.
-                  </div>
-                )}
+            {mp.matches.status === "proposed" && mp.response_status === "proposed" && (
+              <div className="mt-3 flex gap-2">
+                <button disabled={busyId === mp.id} onClick={() => respond(mp.id, "accepted")}
+                  className="rounded-md bg-court-green px-3 py-1 text-sm text-white disabled:opacity-50">Accept</button>
+                <button disabled={busyId === mp.id} onClick={() => respond(mp.id, "declined")}
+                  className="rounded-md border border-stone-300 px-3 py-1 text-sm disabled:opacity-50">Decline</button>
               </div>
-            );
-          })}
-        </div>
-      )}
+            )}
+
+            {mp.matches.status === "confirmed" && (
+              <p className="mt-3 text-sm text-stone-500">
+                If you can not make it to a confirmed match please contact the other players in the
+                match to cancel the match or arrange a sub player.
+              </p>
+            )}
+          </div>
+        );
+      })}
     </div>
   );
 }
