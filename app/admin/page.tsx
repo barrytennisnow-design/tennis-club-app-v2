@@ -66,8 +66,9 @@ export default function AdminHome() {
     <div className="space-y-8">
       <div className="flex gap-4 text-sm">
         <Link href="/admin/roster" className="underline text-court-green">Full Roster</Link>
-        <Link href="/admin/matches" className="underline text-court-green">Matches</Link>
-        <Link href="/admin/grid" className="underline text-court-green">Match Grid</Link>
+        <Link href="/admin/matches" className="underline text-court-green">Matches Tracking</Link>
+        <Link href="/admin/grid" className="underline text-court-green">Match Matrix</Link>
+        <Link href="/admin/settings" className="underline text-court-green">Settings</Link>
       </div>
 
       <div>

@@ -3,13 +3,6 @@
 import { useEffect, useState } from "react";
 import { createClient } from "@/lib/supabaseClient";
 
-// Display text for each time slot -- matches the warmup/start-play
-// format from the old system. Keep in sync with lib/ics.ts's actual
-// start/end times used for calendar invites.
-const TIME_SLOT_DISPLAY: Record<string, string> = {
-  morning: "8:00am warmup, 8:15am start play",
-};
-
 function formatLongDate(dateStr: string) {
   // 'YYYY-MM-DD' -> 'Saturday, 7/11/2026'
   const d = new Date(dateStr + "T00:00:00");
@@ -23,10 +16,14 @@ export default function MyMatchesPage() {
   const [player, setPlayer] = useState<any>(null);
   const [myMatches, setMyMatches] = useState<any[]>([]);
   const [rosterByMatch, setRosterByMatch] = useState<Record<string, any[]>>({});
+  const [timeDisplay, setTimeDisplay] = useState("morning");
   const [loading, setLoading] = useState(true);
   const [busyId, setBusyId] = useState<string | null>(null);
 
   async function load() {
+    const { data: settings } = await supabase.from("club_settings").select("default_time_display").single();
+    if (settings) setTimeDisplay(settings.default_time_display);
+
     const { data: userData } = await supabase.auth.getUser();
     if (!userData.user) {
       setLoading(false);
@@ -113,8 +110,7 @@ export default function MyMatchesPage() {
             </p>
             <p>Court: {mp.matches.court?.name ?? "TBD"}</p>
             <p>
-              Date &amp; Time: {formatLongDate(mp.matches.match_date)} at{" "}
-              {TIME_SLOT_DISPLAY[mp.matches.time_slot] ?? mp.matches.time_slot}
+              Date &amp; Time: {formatLongDate(mp.matches.match_date)} at {timeDisplay}
             </p>
 
             <p className="mt-3 font-medium">Players:</p>
