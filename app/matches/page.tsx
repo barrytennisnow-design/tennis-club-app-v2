@@ -27,7 +27,7 @@ export default function MyMatchesPage() {
     if (p) {
       const { data: mp } = await supabase
         .from("match_players")
-        .select("id, response_status, decline_reason, matches!inner(id, match_date, time_slot, status, court:courts(name)), match_id")
+        .select("id, response_status, decline_reason, match_id, matches!inner(id, match_date, time_slot, status, proposed_at, confirmed_at, cancelled_at, auto_cancel_hours, nudge_count, court:courts(name))")
         .eq("player_id", p.id);
       const nonDraftMatches = (mp ?? []).filter((row: any) => row.matches?.status !== "draft");
       setMyMatches(nonDraftMatches);
@@ -80,15 +80,28 @@ export default function MyMatchesPage() {
       {myMatches.length === 0 && <p className="text-stone-500">No match invites yet.</p>}
       {myMatches.map((mp) => {
         const roster = rosterByMatch[mp.match_id] ?? [];
+        const deadline = mp.matches.proposed_at && mp.matches.auto_cancel_hours
+          ? new Date(new Date(mp.matches.proposed_at).getTime() + mp.matches.auto_cancel_hours * 3600000)
+          : null;
         return (
           <div key={mp.id} className="rounded-md border p-3">
             <div className="flex items-center justify-between">
               <p className="font-medium">
-                {mp.matches.match_date} · {mp.matches.time_slot} · {mp.matches.court?.name ?? "Court TBD"}
+                Match M{mp.matches.id.slice(0, 4)} · {mp.matches.match_date} · {mp.matches.time_slot} · {mp.matches.court?.name ?? "Court TBD"}
               </p>
               <span className="rounded-full bg-stone-100 px-2 py-0.5 text-xs">
                 Match: {mp.matches.status}
               </span>
+            </div>
+
+            <div className="mt-1 text-xs text-stone-500">
+              {mp.matches.proposed_at && <span>Proposed: {new Date(mp.matches.proposed_at).toLocaleString()}</span>}
+              {deadline && mp.matches.status === "proposed" && (
+                <span className="ml-3">Respond by: {deadline.toLocaleString()}</span>
+              )}
+              {mp.matches.confirmed_at && <span className="ml-3">Confirmed: {new Date(mp.matches.confirmed_at).toLocaleString()}</span>}
+              {mp.matches.cancelled_at && <span className="ml-3">Cancelled: {new Date(mp.matches.cancelled_at).toLocaleString()}</span>}
+              {mp.matches.nudge_count > 0 && <span className="ml-3">Nudges sent: {mp.matches.nudge_count}</span>}
             </div>
 
             {/* All 4 players + status, formatted like the old sheet's
