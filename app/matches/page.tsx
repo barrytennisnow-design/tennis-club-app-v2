@@ -38,7 +38,7 @@ export default function MyMatchesPage() {
     if (p) {
       const { data: mp } = await supabase
         .from("match_players")
-        .select("id, response_status, decline_reason, match_id, matches!inner(id, match_date, time_slot, time_display, status, proposed_at, confirmed_at, cancelled_at, auto_cancel_hours, nudge_count, court:courts(name))")
+        .select("id, response_status, decline_reason, match_id, matches!inner(id, match_number, match_date, time_slot, time_display, status, proposed_at, confirmed_at, cancelled_at, auto_cancel_hours, nudge_count, court:courts(name))")
         .eq("player_id", p.id);
       const nonDraftMatches = (mp ?? []).filter((row: any) => row.matches?.status !== "draft");
       // Most recent / soonest first, matching the old system's list
@@ -98,7 +98,7 @@ export default function MyMatchesPage() {
         return (
           <div key={mp.id} className="rounded-md border p-4">
             <p className="font-semibold">
-              Match ID: M{mp.matches.id.slice(0, 4).toUpperCase()}{" "}
+              Match ID: M{mp.matches.match_number}{" "}
               <span className={
                 mp.matches.status === "confirmed" ? "text-green-700" :
                 mp.matches.status === "cancelled" ? "text-red-700" :
@@ -107,10 +107,9 @@ export default function MyMatchesPage() {
                 {mp.matches.status.toUpperCase()}
               </span>
             </p>
+            <p>Date: {formatLongDate(mp.matches.match_date)}</p>
+            <p>Time: {mp.matches.time_display || timeDisplay}</p>
             <p>Court: {mp.matches.court?.name ?? "TBD"}</p>
-            <p>
-              Date &amp; Time: {formatLongDate(mp.matches.match_date)} at {mp.matches.time_display || timeDisplay}
-            </p>
 
             <p className="mt-3 font-medium">Players:</p>
             <ul className="ml-4 list-disc space-y-0.5">

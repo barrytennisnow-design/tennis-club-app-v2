@@ -386,76 +386,71 @@ export default function MatchMatrixPage() {
       </div>
 
       {selectedMatch && selectedPlayer && (
-        <div className="flex flex-wrap items-center gap-2 rounded-md border bg-stone-50 px-2 py-1.5 text-xs">
-          <span className="font-semibold">
-            M{selectedMatch.match_number} · {formatShortDateWithWeekday(selectedMatch.match_date)} ·{" "}
-            {selectedMatch.time_display || defaultTimeDisplay} ·{" "}
-            <span className="rounded-full bg-stone-200 px-1.5 py-0.5">{selectedMatch.status.toUpperCase()}</span>
-          </span>
+        <div className="w-72 space-y-1 rounded-md border bg-stone-50 p-3 text-sm">
+          <p className="font-bold">M{selectedMatch.match_number}</p>
 
-          <span className="text-stone-600">
-            {selectedMatch.match_players.map((mp: any, i: number) => (
-              <span key={mp.id}>
-                {i > 0 && ", "}
-                {mp.players.first_name} {mp.players.last_name}
-                {selectedMatch.status !== "draft" && <span className="text-stone-400"> ({mp.response_status})</span>}
-              </span>
-            ))}
-          </span>
-
-          {selectedMatch.status === "draft" && (
-            <>
-              <label className="flex items-center gap-1">
-                Court:
-                <select
-                  className="rounded border border-stone-300 px-1 py-0.5 text-xs"
-                  defaultValue={selectedMatch.court?.id ?? ""}
-                  onChange={(e) => handleAssignCourt(e.target.value)}
-                >
-                  <option value="">TBD</option>
-                  {courts.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
-                </select>
-              </label>
-
-              <label className="flex items-center gap-1" key={selectedMatch.id}>
-                Time:
-                <select
-                  className="rounded border border-stone-300 px-1 py-0.5 text-xs"
-                  defaultValue={
-                    !selectedMatch.time_display
-                      ? "__default__"
-                      : TIME_PRESETS.includes(selectedMatch.time_display)
-                      ? selectedMatch.time_display
-                      : "__custom__"
-                  }
-                  onChange={(e) => {
-                    setTimeChoice(e.target.value);
-                    if (e.target.value !== "__custom__") handleSetTime(e.target.value);
-                  }}
-                >
-                  <option value="__default__">Default ({defaultTimeDisplay})</option>
-                  {TIME_PRESETS.map((t) => <option key={t} value={t}>{t}</option>)}
-                  <option value="__custom__">Custom...</option>
-                </select>
-                {(timeChoice === "__custom__" || (!TIME_PRESETS.includes(selectedMatch.time_display) && selectedMatch.time_display)) && (
-                  <input
-                    className="rounded border border-stone-300 px-1 py-0.5 text-xs"
-                    defaultValue={selectedMatch.time_display || ""}
-                    placeholder="e.g. 6:30am warmup, 6:45am start play"
-                    onChange={(e) => setCustomTime(e.target.value)}
-                    onBlur={(e) => handleSetTime(e.target.value)}
-                  />
-                )}
-              </label>
-
-              <button onClick={handlePropose} className="rounded bg-court-green px-2 py-1 text-white">
-                Propose
-              </button>
-            </>
+          {selectedMatch.status === "draft" ? (
+            <select
+              className="w-full rounded border border-stone-300 px-1 py-0.5 text-sm"
+              defaultValue={selectedMatch.court?.id ?? ""}
+              onChange={(e) => handleAssignCourt(e.target.value)}
+            >
+              <option value="">Court TBD</option>
+              {courts.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
+            </select>
+          ) : (
+            <p>{selectedMatch.court?.name ?? "Court TBD"}</p>
           )}
 
-          {selectedMatch.status !== "draft" && (
-            <button onClick={handleCancel} className="rounded border border-red-300 px-2 py-1 text-red-700">
+          {selectedMatch.status === "draft" ? (
+            <div key={selectedMatch.id}>
+              <select
+                className="w-full rounded border border-stone-300 px-1 py-0.5 text-sm"
+                defaultValue={
+                  !selectedMatch.time_display
+                    ? "__default__"
+                    : TIME_PRESETS.includes(selectedMatch.time_display)
+                    ? selectedMatch.time_display
+                    : "__custom__"
+                }
+                onChange={(e) => {
+                  setTimeChoice(e.target.value);
+                  if (e.target.value !== "__custom__") handleSetTime(e.target.value);
+                }}
+              >
+                <option value="__default__">Default ({defaultTimeDisplay})</option>
+                {TIME_PRESETS.map((t) => <option key={t} value={t}>{t}</option>)}
+                <option value="__custom__">Custom...</option>
+              </select>
+              {(timeChoice === "__custom__" || (!TIME_PRESETS.includes(selectedMatch.time_display) && selectedMatch.time_display)) && (
+                <input
+                  className="mt-1 w-full rounded border border-stone-300 px-1 py-0.5 text-sm"
+                  defaultValue={selectedMatch.time_display || ""}
+                  placeholder="e.g. 6:30am warmup, 6:45am start play"
+                  onChange={(e) => setCustomTime(e.target.value)}
+                  onBlur={(e) => handleSetTime(e.target.value)}
+                />
+              )}
+            </div>
+          ) : (
+            <p>{selectedMatch.time_display || defaultTimeDisplay}</p>
+          )}
+
+          {selectedMatch.match_players.map((mp: any) => (
+            <p key={mp.id}>
+              {mp.players.first_name} {mp.players.last_name} :{" "}
+              {selectedMatch.status === "draft" ? "DRAFT" : mp.response_status.toUpperCase()}
+            </p>
+          ))}
+
+          <p className="font-semibold">STATUS: {selectedMatch.status.toUpperCase()}</p>
+
+          {selectedMatch.status === "draft" ? (
+            <button onClick={handlePropose} className="w-full rounded bg-court-green px-2 py-1 text-white">
+              Propose
+            </button>
+          ) : (
+            <button onClick={handleCancel} className="w-full rounded border border-red-300 px-2 py-1 text-red-700">
               Cancel match
             </button>
           )}

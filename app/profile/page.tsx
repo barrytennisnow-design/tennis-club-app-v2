@@ -3,6 +3,8 @@
 import { useEffect, useState } from "react";
 import { createClient } from "@/lib/supabaseClient";
 
+const RANKING_OPTIONS = ["2.5","2.75","3.0","3.25","3.5","3.75","4.0","4.25","4.5"];
+
 export default function ProfilePage() {
   const supabase = createClient();
   const [player, setPlayer] = useState<any>(null);
@@ -31,16 +33,18 @@ export default function ProfilePage() {
     e.preventDefault();
     setSaving(true);
     setSaved(false);
+    // Only these fields are ever player-editable. First/last name and
+    // the manager's own rating are never touched here -- the manager's
+    // rating is only ever set on the Roster page, and is intentionally
+    // never shown back to the player.
     const { error } = await supabase
       .from("players")
       .update({
+        email: player.email,
         phone: player.phone,
-        address: player.address,
-        city: player.city,
-        state: player.state,
-        zip: player.zip,
         days_per_week: player.days_per_week,
         days_in_a_row: player.days_in_a_row,
+        self_reported_ranking: player.self_reported_ranking,
         notes: player.notes,
       })
       .eq("id", player.id);
@@ -62,6 +66,9 @@ export default function ProfilePage() {
       <h1 className="text-xl font-bold">
         {player.first_name} {player.last_name}
       </h1>
+      <p className="text-xs text-stone-400">
+        Name changes aren't self-service -- contact the manager if this needs fixing.
+      </p>
 
       <p
         className={`inline-block rounded-full px-3 py-1 text-sm ${
@@ -82,10 +89,17 @@ export default function ProfilePage() {
         </p>
       )}
 
-      <div className="grid grid-cols-2 gap-4 text-sm">
-        <p><strong>Email:</strong> {player.email}</p>
-        <p><strong>Ranking:</strong> {player.ranking ?? player.self_reported_ranking ?? "—"} {!player.ranking && "(self-reported, pending manager review)"}</p>
-      </div>
+      {(player.address || player.city || player.state || player.zip) && (
+        <p className="text-sm text-stone-500">
+          {[player.address, player.city, player.state, player.zip].filter(Boolean).join(", ")}
+        </p>
+      )}
+
+      <label className="block text-sm font-medium">
+        Email
+        <input type="email" className="input mt-1 w-full" value={player.email ?? ""}
+          onChange={(e) => setPlayer({ ...player, email: e.target.value })} />
+      </label>
 
       <label className="block text-sm font-medium">
         Phone
@@ -94,19 +108,13 @@ export default function ProfilePage() {
       </label>
 
       <label className="block text-sm font-medium">
-        Address
-        <input className="input mt-1 w-full" value={player.address ?? ""}
-          onChange={(e) => setPlayer({ ...player, address: e.target.value })} />
+        Your self-rated ranking (a manager sets your official rating separately)
+        <select className="input mt-1 w-full" value={player.self_reported_ranking ?? ""}
+          onChange={(e) => setPlayer({ ...player, self_reported_ranking: e.target.value })}>
+          <option value="">Not set</option>
+          {RANKING_OPTIONS.map((r) => <option key={r} value={r}>{r}</option>)}
+        </select>
       </label>
-
-      <div className="grid grid-cols-3 gap-4">
-        <input placeholder="City" className="input" value={player.city ?? ""}
-          onChange={(e) => setPlayer({ ...player, city: e.target.value })} />
-        <input placeholder="State" className="input" value={player.state ?? ""}
-          onChange={(e) => setPlayer({ ...player, state: e.target.value })} />
-        <input placeholder="Zip" className="input" value={player.zip ?? ""}
-          onChange={(e) => setPlayer({ ...player, zip: e.target.value })} />
-      </div>
 
       <div className="grid grid-cols-2 gap-4">
         <label className="block text-sm font-medium">
@@ -125,8 +133,11 @@ export default function ProfilePage() {
         </label>
       </div>
 
-      <textarea placeholder="Anything else you want to say?" className="input w-full" rows={3}
-        value={player.notes ?? ""} onChange={(e) => setPlayer({ ...player, notes: e.target.value })} />
+      <label className="block text-sm font-medium">
+        Comments
+        <textarea placeholder="Anything else you want to say?" className="input mt-1 w-full" rows={3}
+          value={player.notes ?? ""} onChange={(e) => setPlayer({ ...player, notes: e.target.value })} />
+      </label>
 
       <button disabled={saving}
         className="rounded-md bg-court-green px-4 py-2 text-white hover:bg-court-green/90 disabled:opacity-50">

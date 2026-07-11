@@ -43,7 +43,7 @@ export default function SignupPage() {
     const { error: authError } = await supabase.auth.signInWithOtp({
       email: form.email,
       options: {
-        emailRedirectTo: `${process.env.NEXT_PUBLIC_SITE_URL}/auth/callback?next=/profile`,
+        emailRedirectTo: `${process.env.NEXT_PUBLIC_SITE_URL}/auth/callback?next=/matches`,
         data: {
           // stashed so /auth/callback can create the players row
           // on first login if it doesn't exist yet
