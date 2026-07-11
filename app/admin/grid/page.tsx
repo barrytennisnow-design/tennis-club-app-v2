@@ -360,26 +360,28 @@ export default function MatchMatrixPage() {
       </div>
 
       {selectedMatch && selectedPlayer && (
-        <div className="rounded-md border bg-stone-50 p-4 space-y-3">
-          <p className="font-semibold">
-            Match M{selectedMatch.match_number} · {selectedMatch.match_date} · {selectedMatch.time_slot} ·{" "}
-            <span className="rounded-full bg-stone-200 px-2 py-0.5 text-xs">{selectedMatch.status.toUpperCase()}</span>
-          </p>
-          <ul className="text-sm">
-            {selectedMatch.match_players.map((mp: any) => (
-              <li key={mp.id}>
+        <div className="flex flex-wrap items-center gap-2 rounded-md border bg-stone-50 px-2 py-1.5 text-xs">
+          <span className="font-semibold">
+            M{selectedMatch.match_number} · {selectedMatch.match_date} · {selectedMatch.time_slot} ·{" "}
+            <span className="rounded-full bg-stone-200 px-1.5 py-0.5">{selectedMatch.status.toUpperCase()}</span>
+          </span>
+
+          <span className="text-stone-600">
+            {selectedMatch.match_players.map((mp: any, i: number) => (
+              <span key={mp.id}>
+                {i > 0 && ", "}
                 {mp.players.first_name} {mp.players.last_name}
-                {selectedMatch.status !== "draft" && <span className="text-stone-400"> : {mp.response_status}</span>}
-              </li>
+                {selectedMatch.status !== "draft" && <span className="text-stone-400"> ({mp.response_status})</span>}
+              </span>
             ))}
-          </ul>
+          </span>
 
           {selectedMatch.status === "draft" && (
             <>
-              <label className="block text-sm">
+              <label className="flex items-center gap-1">
                 Court:
                 <select
-                  className="ml-2 rounded border border-stone-300 px-2 py-1 text-sm"
+                  className="rounded border border-stone-300 px-1 py-0.5 text-xs"
                   defaultValue={selectedMatch.court?.id ?? ""}
                   onChange={(e) => handleAssignCourt(e.target.value)}
                 >
@@ -388,19 +390,21 @@ export default function MatchMatrixPage() {
                 </select>
               </label>
 
-              <p className="text-xs text-stone-500">
-                To swap a player, close this panel, click "Swap two players" above, then click this player and whoever should take their spot.
-              </p>
-
-              <button onClick={handlePropose} className="rounded-md bg-court-green px-4 py-2 text-sm text-white">
-                Propose (emails players)
+              <button onClick={handlePropose} className="rounded bg-court-green px-2 py-1 text-white">
+                Propose
               </button>
             </>
           )}
 
-          <button onClick={handleCancel} className="ml-2 rounded-md border border-red-300 px-4 py-2 text-sm text-red-700">
+          <button onClick={handleCancel} className="rounded border border-red-300 px-2 py-1 text-red-700">
             Cancel match
           </button>
+
+          {selectedMatch.status === "draft" && (
+            <span className="w-full text-[10px] text-stone-400">
+              To swap: close this, click "Swap two players" above, then click this player and their replacement.
+            </span>
+          )}
         </div>
       )}
     </div>
