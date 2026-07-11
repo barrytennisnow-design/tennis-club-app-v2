@@ -39,7 +39,9 @@ export default function MatchMatrixPage() {
   const [startDate, setStartDate] = useState(isoDaysFromNow(0));
   const [endDate, setEndDate] = useState(isoDaysFromNow(7));
   const [selected, setSelected] = useState<{ playerId: string; date: string } | null>(null);
-  const [swapTarget, setSwapTarget] = useState("");
+  const [swapMode, setSwapMode] = useState(false);
+  const [swapSlots, setSwapSlots] = useState<{ playerId: string; matchId: string | null; date: string; label: string }[]>([]);
+  const [swapBusy, setSwapBusy] = useState(false);
   const days = nextNDays(30);
 
   async function load() {
@@ -187,35 +189,56 @@ export default function MatchMatrixPage() {
     load();
   }
 
-  async function handleSwap() {
-    if (!selectedMatch || !selected || !swapTarget) return;
-    const res = await fetch("/api/admin/swap-player", {
+  function handleCellClick(playerId: string, date: string, hasMatch: any, isUnassigned: boolean) {
+    if (!swapMode) {
+      if (hasMatch) setSelected(selected?.playerId === playerId && selected?.date === date ? null : { playerId, date });
+      return;
+    }
+    // Swap mode: only draft-match players or Unassigned cells are eligible.
+    if (!hasMatch && !isUnassigned) return;
+    if (hasMatch && hasMatch.status !== "draft") return;
+
+    const player = players.find((p) => p.id === playerId);
+    const label = hasMatch ? `M${hasMatch.match_number}` : "Unassigned";
+    const slot = { playerId, matchId: hasMatch ? hasMatch.id : null, date, label: `${player?.first_name} (${label})` };
+
+    setSwapSlots((prev) => {
+      const already = prev.find((s) => s.playerId === playerId && s.date === date);
+      if (already) return prev.filter((s) => s !== already); // click again to deselect
+      if (prev.length === 0) return [slot];
+      if (prev.length === 1) {
+        if (prev[0].date !== date) {
+          alert("Both players must be on the same day to swap.");
+          return prev;
+        }
+        return [prev[0], slot];
+      }
+      return [slot]; // start fresh if 2 already picked
+    });
+  }
+
+  async function confirmSwap() {
+    if (swapSlots.length !== 2) return;
+    setSwapBusy(true);
+    const res = await fetch("/api/admin/swap-two-players", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ match_id: selectedMatch.id, old_player_id: selected.playerId, new_player_id: swapTarget }),
+      body: JSON.stringify({
+        slotA: { playerId: swapSlots[0].playerId, matchId: swapSlots[0].matchId },
+        slotB: { playerId: swapSlots[1].playerId, matchId: swapSlots[1].matchId },
+      }),
     });
     const json = await res.json();
+    setSwapBusy(false);
     if (!json.ok) {
       alert(`Couldn't swap: ${json.error}`);
       return;
     }
-    setSwapTarget("");
-    setSelected(null);
+    setSwapSlots([]);
     load();
   }
 
   if (loading) return <p>Loading...</p>;
-
-  const dayKey = selectedMatch ? `${selectedMatch.match_date}_${selectedMatch.time_slot}` : "";
-  const playerIdsInSelectedMatch = new Set((selectedMatch?.match_players ?? []).map((mp: any) => mp.player_id));
-  const busySet = new Set<string>();
-  for (const m of matches) {
-    for (const mp of m.match_players) busySet.add(`${mp.player_id}_${m.match_date}_${m.time_slot}`);
-  }
-  const swapOptions = (availabilityByDay[dayKey] ?? [])
-    .filter((row: any) => !playerIdsInSelectedMatch.has(row.player_id))
-    .filter((row: any) => !busySet.has(`${row.player_id}_${selectedMatch?.match_date}_${selectedMatch?.time_slot}`))
-    .map((row: any) => row.players);
 
   return (
     <div className="space-y-4">
@@ -236,9 +259,34 @@ export default function MatchMatrixPage() {
         {lastResult && <p className="text-sm text-stone-600">{lastResult}</p>}
       </div>
 
+      <div className="flex flex-wrap items-center gap-3">
+        <button
+          onClick={() => { setSwapMode(!swapMode); setSwapSlots([]); setSelected(null); }}
+          className={`rounded-md px-4 py-2 text-sm font-medium ${swapMode ? "bg-purple-600 text-white" : "border border-purple-400 text-purple-700"}`}
+        >
+          {swapMode ? "Swap mode ON — click two players" : "Swap two players"}
+        </button>
+
+        {swapMode && swapSlots.length > 0 && (
+          <div className="flex items-center gap-2 rounded-md bg-purple-50 px-3 py-2 text-sm">
+            {swapSlots.map((s, i) => (
+              <span key={i} className="rounded bg-white px-2 py-0.5">{s.label}</span>
+            ))}
+            {swapSlots.length === 2 && (
+              <button onClick={confirmSwap} disabled={swapBusy}
+                className="rounded-md bg-purple-600 px-3 py-1 text-white disabled:opacity-50">
+                {swapBusy ? "Swapping..." : "Confirm swap"}
+              </button>
+            )}
+            <button onClick={() => setSwapSlots([])} className="text-purple-500 underline">clear</button>
+          </div>
+        )}
+      </div>
+
       <p className="text-xs text-stone-500">
-        Click any colored cell to manage that match. Grey "Unassigned" means available that day but not yet matched.
-        Orange-ringed cells mean that player is over their own days/week or days-in-a-row limit.
+        {swapMode
+          ? "Click a player in a draft match or an \"Unassigned\" player to select them, then pick a second one on the same day to swap."
+          : "Click any colored cell to manage that match. Grey \"Unassigned\" means available that day but not yet matched. Orange-ringed cells mean that player is over their own days/week or days-in-a-row limit."}
       </p>
 
       <div className="overflow-x-auto rounded-md border">
@@ -279,9 +327,9 @@ export default function MatchMatrixPage() {
                   return (
                     <td key={d} className="p-1 text-center">
                       <button
-                        disabled={!m}
-                        onClick={() => m && setSelected(isSelected ? null : { playerId: p.id, date: d })}
-                        className={`block w-full whitespace-nowrap rounded px-1.5 py-1 text-left ${color} ${isOverloaded ? "ring-2 ring-orange-400" : ""} ${isSelected ? "outline outline-2 outline-purple-500" : ""}`}
+                        disabled={!m && !isAvailUnassigned}
+                        onClick={() => handleCellClick(p.id, d, m, isAvailUnassigned)}
+                        className={`block w-full whitespace-nowrap rounded px-1.5 py-1 text-left ${color} ${isOverloaded ? "ring-2 ring-orange-400" : ""} ${isSelected ? "outline outline-2 outline-purple-500" : ""} ${swapSlots.some((s) => s.playerId === p.id && s.date === d) ? "outline outline-2 outline-purple-600" : ""}`}
                       >
                         {m ? `${p.first_name} M${m.match_number}` : isAvailUnassigned ? `${p.first_name} Unassigned` : ""}
                       </button>
@@ -330,19 +378,9 @@ export default function MatchMatrixPage() {
                 </select>
               </label>
 
-              <div className="flex items-center gap-2 text-sm">
-                <span>Swap out {selectedPlayer.first_name} for:</span>
-                <select
-                  className="rounded border border-stone-300 px-2 py-1 text-sm"
-                  value={swapTarget}
-                  onChange={(e) => setSwapTarget(e.target.value)}
-                >
-                  <option value="">Choose player...</option>
-                  {swapOptions.map((sp: any) => <option key={sp.id} value={sp.id}>{sp.first_name} {sp.last_name}</option>)}
-                </select>
-                <button disabled={!swapTarget} onClick={handleSwap}
-                  className="rounded bg-stone-200 px-2 py-1 text-xs disabled:opacity-40">Swap</button>
-              </div>
+              <p className="text-xs text-stone-500">
+                To swap a player, close this panel, click "Swap two players" above, then click this player and whoever should take their spot.
+              </p>
 
               <button onClick={handlePropose} className="rounded-md bg-court-green px-4 py-2 text-sm text-white">
                 Propose (emails players)
