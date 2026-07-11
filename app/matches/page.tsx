@@ -2,13 +2,12 @@
 
 import { useEffect, useState } from "react";
 import { createClient } from "@/lib/supabaseClient";
+import { formatShortDate } from "@/lib/formatDate";
 
 function formatLongDate(dateStr: string) {
-  // 'YYYY-MM-DD' -> 'Saturday, 7/11/2026'
   const d = new Date(dateStr + "T00:00:00");
   const weekday = d.toLocaleDateString(undefined, { weekday: "long" });
-  const short = d.toLocaleDateString(undefined, { month: "numeric", day: "numeric", year: "numeric" });
-  return `${weekday}, ${short}`;
+  return `${weekday}, ${formatShortDate(dateStr)}`;
 }
 
 export default function MyMatchesPage() {
@@ -39,7 +38,7 @@ export default function MyMatchesPage() {
     if (p) {
       const { data: mp } = await supabase
         .from("match_players")
-        .select("id, response_status, decline_reason, match_id, matches!inner(id, match_date, time_slot, status, proposed_at, confirmed_at, cancelled_at, auto_cancel_hours, nudge_count, court:courts(name))")
+        .select("id, response_status, decline_reason, match_id, matches!inner(id, match_date, time_slot, time_display, status, proposed_at, confirmed_at, cancelled_at, auto_cancel_hours, nudge_count, court:courts(name))")
         .eq("player_id", p.id);
       const nonDraftMatches = (mp ?? []).filter((row: any) => row.matches?.status !== "draft");
       // Most recent / soonest first, matching the old system's list
@@ -110,7 +109,7 @@ export default function MyMatchesPage() {
             </p>
             <p>Court: {mp.matches.court?.name ?? "TBD"}</p>
             <p>
-              Date &amp; Time: {formatLongDate(mp.matches.match_date)} at {timeDisplay}
+              Date &amp; Time: {formatLongDate(mp.matches.match_date)} at {mp.matches.time_display || timeDisplay}
             </p>
 
             <p className="mt-3 font-medium">Players:</p>

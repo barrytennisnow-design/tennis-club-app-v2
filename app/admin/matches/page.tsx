@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { createClient } from "@/lib/supabaseClient";
+import { formatShortDate } from "@/lib/formatDate";
 
 export default function AdminMatchesPage() {
   const supabase = createClient();
@@ -158,7 +159,7 @@ export default function AdminMatchesPage() {
               return (
                 <tr key={m.id} className={`border-t ${rowColor}`}>
                   <td className="p-2 font-mono">M{m.id.slice(0, 4)}</td>
-                  <td className="p-2">{m.match_date}</td>
+                  <td className="p-2">{formatShortDate(m.match_date)}</td>
                   <td className="p-2">{m.time_slot}</td>
                   <td className="p-2">{m.court?.name ?? "TBD"}</td>
                   {players.map((mp: any, i: number) => (

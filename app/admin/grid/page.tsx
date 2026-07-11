@@ -2,6 +2,15 @@
 
 import { useEffect, useState } from "react";
 import { createClient } from "@/lib/supabaseClient";
+import { formatShortDateWithWeekday } from "@/lib/formatDate";
+
+const TIME_PRESETS = [
+  "7:00am warmup, 7:15am start play",
+  "8:00am warmup, 8:15am start play",
+  "9:00am warmup, 9:15am start play",
+  "4:00pm warmup, 4:15pm start play",
+  "5:00pm warmup, 5:15pm start play",
+];
 
 function isoDaysFromNow(n: number) {
   const d = new Date();
@@ -32,6 +41,9 @@ export default function MatchMatrixPage() {
   const [players, setPlayers] = useState<any[]>([]);
   const [matches, setMatches] = useState<any[]>([]);
   const [courts, setCourts] = useState<any[]>([]);
+  const [defaultTimeDisplay, setDefaultTimeDisplay] = useState("");
+  const [timeChoice, setTimeChoice] = useState<string>("");
+  const [customTime, setCustomTime] = useState<string>("");
   const [availabilityByDay, setAvailabilityByDay] = useState<Record<string, any[]>>({});
   const [loading, setLoading] = useState(true);
   const [generating, setGenerating] = useState(false);
@@ -58,7 +70,7 @@ export default function MatchMatrixPage() {
 
     const { data: matchRows } = await supabase
       .from("matches")
-      .select("id, match_number, match_date, time_slot, status, court:courts(id, name), match_players(id, player_id, response_status, players(id, first_name, last_name))")
+      .select("id, match_number, match_date, time_slot, time_display, status, court:courts(id, name), match_players(id, player_id, response_status, players(id, first_name, last_name))")
       .gte("match_date", days[0])
       .lte("match_date", days[days.length - 1])
       .neq("status", "cancelled");
@@ -66,6 +78,9 @@ export default function MatchMatrixPage() {
 
     const { data: courtRows } = await supabase.from("courts").select("*").order("name");
     setCourts(courtRows ?? []);
+
+    const { data: settingsRow } = await supabase.from("club_settings").select("default_time_display").single();
+    if (settingsRow) setDefaultTimeDisplay(settingsRow.default_time_display);
 
     const { data: availRows } = await supabase
       .from("availability")
@@ -177,6 +192,17 @@ export default function MatchMatrixPage() {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ match_id: selectedMatch.id, court_id: courtId || null }),
+    });
+    load();
+  }
+
+  async function handleSetTime(value: string) {
+    if (!selectedMatch) return;
+    const finalValue = value === "__default__" ? "" : value === "__custom__" ? customTime : value;
+    await fetch("/api/admin/set-match-time", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ match_id: selectedMatch.id, time_display: finalValue }),
     });
     load();
   }
@@ -308,7 +334,7 @@ export default function MatchMatrixPage() {
               <th className="sticky left-[128px] z-10 bg-stone-100 px-1 py-0.5 text-left">Rank</th>
               {days.map((d) => (
                 <th key={d} className="whitespace-nowrap px-1.5 py-0.5 text-center font-normal">
-                  {new Date(d + "T00:00:00").toLocaleDateString(undefined, { weekday: "short", month: "numeric", day: "numeric" })}
+                  {formatShortDateWithWeekday(d)}
                 </th>
               ))}
               <th className="whitespace-nowrap px-1.5 py-0.5">Days/wk</th>
@@ -362,7 +388,8 @@ export default function MatchMatrixPage() {
       {selectedMatch && selectedPlayer && (
         <div className="flex flex-wrap items-center gap-2 rounded-md border bg-stone-50 px-2 py-1.5 text-xs">
           <span className="font-semibold">
-            M{selectedMatch.match_number} · {selectedMatch.match_date} · {selectedMatch.time_slot} ·{" "}
+            M{selectedMatch.match_number} · {formatShortDateWithWeekday(selectedMatch.match_date)} ·{" "}
+            {selectedMatch.time_display || defaultTimeDisplay} ·{" "}
             <span className="rounded-full bg-stone-200 px-1.5 py-0.5">{selectedMatch.status.toUpperCase()}</span>
           </span>
 
@@ -390,20 +417,47 @@ export default function MatchMatrixPage() {
                 </select>
               </label>
 
+              <label className="flex items-center gap-1" key={selectedMatch.id}>
+                Time:
+                <select
+                  className="rounded border border-stone-300 px-1 py-0.5 text-xs"
+                  defaultValue={
+                    !selectedMatch.time_display
+                      ? "__default__"
+                      : TIME_PRESETS.includes(selectedMatch.time_display)
+                      ? selectedMatch.time_display
+                      : "__custom__"
+                  }
+                  onChange={(e) => {
+                    setTimeChoice(e.target.value);
+                    if (e.target.value !== "__custom__") handleSetTime(e.target.value);
+                  }}
+                >
+                  <option value="__default__">Default ({defaultTimeDisplay})</option>
+                  {TIME_PRESETS.map((t) => <option key={t} value={t}>{t}</option>)}
+                  <option value="__custom__">Custom...</option>
+                </select>
+                {(timeChoice === "__custom__" || (!TIME_PRESETS.includes(selectedMatch.time_display) && selectedMatch.time_display)) && (
+                  <input
+                    className="rounded border border-stone-300 px-1 py-0.5 text-xs"
+                    defaultValue={selectedMatch.time_display || ""}
+                    placeholder="e.g. 6:30am warmup, 6:45am start play"
+                    onChange={(e) => setCustomTime(e.target.value)}
+                    onBlur={(e) => handleSetTime(e.target.value)}
+                  />
+                )}
+              </label>
+
               <button onClick={handlePropose} className="rounded bg-court-green px-2 py-1 text-white">
                 Propose
               </button>
             </>
           )}
 
-          <button onClick={handleCancel} className="rounded border border-red-300 px-2 py-1 text-red-700">
-            Cancel match
-          </button>
-
-          {selectedMatch.status === "draft" && (
-            <span className="w-full text-[10px] text-stone-400">
-              To swap: close this, click "Swap two players" above, then click this player and their replacement.
-            </span>
+          {selectedMatch.status !== "draft" && (
+            <button onClick={handleCancel} className="rounded border border-red-300 px-2 py-1 text-red-700">
+              Cancel match
+            </button>
           )}
         </div>
       )}
