@@ -13,15 +13,19 @@ function nextNDays(n: number) {
   for (let i = 0; i < n; i++) days.push(isoDaysFromNow(i));
   return days;
 }
-function shortName(p: { first_name: string; last_name: string }) {
-  return `${p.first_name} ${p.last_name[0]}.`;
-}
 
-const STATUS_COLORS: Record<string, string> = {
-  draft: "bg-stone-200 text-stone-700",
-  proposed: "bg-yellow-200 text-yellow-900",
-  confirmed: "bg-green-200 text-green-900",
-};
+// Same color palette style as the old sheet -- one color per match,
+// cycling through the set, NOT tied to status. "Unassigned" (available
+// but not yet in a match) always gets the light grey.
+const MATCH_PALETTE = [
+  "bg-[#FFE8D6]", // orange
+  "bg-[#D4EDDA]", // green
+  "bg-[#FFF3CD]", // yellow
+  "bg-[#D1ECF1]", // blue
+  "bg-[#F8D7DA]", // red
+  "bg-[#E5D4ED]", // purple
+];
+const UNASSIGNED_COLOR = "bg-[#F8F9FA]";
 
 export default function MatchMatrixPage() {
   const supabase = createClient();
@@ -41,14 +45,14 @@ export default function MatchMatrixPage() {
   async function load() {
     const { data: playerRows } = await supabase
       .from("players")
-      .select("id, first_name, last_name, days_per_week, days_in_a_row")
+      .select("id, first_name, last_name, ranking, days_per_week, days_in_a_row, zip, phone, email, notes, status")
       .eq("status", "active")
-      .order("last_name");
+      .order("first_name");
     setPlayers(playerRows ?? []);
 
     const { data: matchRows } = await supabase
       .from("matches")
-      .select("id, match_date, time_slot, status, court:courts(id, name), match_players(id, player_id, response_status, players(id, first_name, last_name))")
+      .select("id, match_number, match_date, time_slot, status, court:courts(id, name), match_players(id, player_id, response_status, players(id, first_name, last_name))")
       .gte("match_date", days[0])
       .lte("match_date", days[days.length - 1])
       .neq("status", "cancelled");
@@ -94,23 +98,28 @@ export default function MatchMatrixPage() {
     }
   }
 
-  // player_id_date -> the match they're in that day (if any)
+  // player_id_date -> match they're in that day (if any)
   const cellIndex: Record<string, any> = {};
   for (const m of matches) {
     for (const mp of m.match_players) {
       cellIndex[`${mp.player_id}_${m.match_date}`] = m;
     }
   }
+  // player_id_date -> true if available that day but not in a match
+  const availIndex = new Set<string>();
+  for (const key of Object.keys(availabilityByDay)) {
+    const [date] = key.split("_");
+    for (const row of availabilityByDay[key]) {
+      if (!cellIndex[`${row.player_id}_${date}`]) availIndex.add(`${row.player_id}_${date}`);
+    }
+  }
 
-  // Overload detection: rolling 7-day count vs days_per_week, and
-  // consecutive-day streaks vs days_in_a_row.
   const overloaded = new Set<string>();
   for (const p of players) {
     const matchDates = matches
       .filter((m) => m.match_players.some((mp: any) => mp.player_id === p.id))
       .map((m) => m.match_date)
       .sort();
-
     if (p.days_per_week) {
       for (const d of matchDates) {
         const windowStart = new Date(d);
@@ -119,7 +128,6 @@ export default function MatchMatrixPage() {
         if (count > p.days_per_week) overloaded.add(`${p.id}_${d}`);
       }
     }
-
     if (p.days_in_a_row) {
       let streak: string[] = [];
       for (let i = 0; i < matchDates.length; i++) {
@@ -128,9 +136,8 @@ export default function MatchMatrixPage() {
         } else {
           const prev = new Date(streak[streak.length - 1]);
           prev.setDate(prev.getDate() + 1);
-          if (prev.toISOString().slice(0, 10) === matchDates[i]) {
-            streak.push(matchDates[i]);
-          } else {
+          if (prev.toISOString().slice(0, 10) === matchDates[i]) streak.push(matchDates[i]);
+          else {
             if (streak.length > p.days_in_a_row) streak.forEach((d) => overloaded.add(`${p.id}_${d}`));
             streak = [matchDates[i]];
           }
@@ -216,10 +223,6 @@ export default function MatchMatrixPage() {
 
       <div className="rounded-md border p-4 space-y-3">
         <p className="font-medium">Generate draft matches from current availability</p>
-        <p className="text-xs text-stone-500">
-          Builds silent drafts (no emails). Clears out old drafts and cancelled matches each run;
-          never touches anything already proposed or confirmed.
-        </p>
         <div className="flex items-center gap-3 text-sm">
           <label>From <input type="date" value={startDate} onChange={(e) => setStartDate(e.target.value)}
             className="ml-1 rounded border border-stone-300 px-2 py-1" /></label>
@@ -233,48 +236,65 @@ export default function MatchMatrixPage() {
         {lastResult && <p className="text-sm text-stone-600">{lastResult}</p>}
       </div>
 
-      <p className="text-sm text-stone-600">
-        Click a cell to manage that match.
-        <span className="ml-2 inline-block rounded bg-stone-200 px-2 py-0.5 text-xs">draft</span>
-        <span className="ml-1 inline-block rounded bg-yellow-200 px-2 py-0.5 text-xs">proposed</span>
-        <span className="ml-1 inline-block rounded bg-green-200 px-2 py-0.5 text-xs">confirmed</span>
-        <span className="ml-2 inline-block rounded bg-orange-100 px-2 py-0.5 text-xs ring-1 ring-orange-400">over days/week or days-in-a-row limit</span>
+      <p className="text-xs text-stone-500">
+        Click any colored cell to manage that match. Grey "Unassigned" means available that day but not yet matched.
+        Orange-ringed cells mean that player is over their own days/week or days-in-a-row limit.
       </p>
 
       <div className="overflow-x-auto rounded-md border">
         <table className="text-xs">
           <thead className="bg-stone-100">
             <tr>
-              <th className="sticky left-0 z-10 bg-stone-100 p-2 text-left">Player</th>
+              <th className="sticky left-0 z-10 bg-stone-100 p-2 text-left">First</th>
+              <th className="sticky left-[70px] z-10 bg-stone-100 p-2 text-left">Last</th>
               {days.map((d) => (
                 <th key={d} className="whitespace-nowrap p-2 text-center font-normal">
                   {new Date(d + "T00:00:00").toLocaleDateString(undefined, { weekday: "short", month: "numeric", day: "numeric" })}
                 </th>
               ))}
+              <th className="whitespace-nowrap p-2">Rating</th>
+              <th className="whitespace-nowrap p-2">Days/wk</th>
+              <th className="whitespace-nowrap p-2">Days in row</th>
+              <th className="whitespace-nowrap p-2">Zip</th>
+              <th className="whitespace-nowrap p-2">Phone</th>
+              <th className="whitespace-nowrap p-2">Email</th>
+              <th className="whitespace-nowrap p-2">Notes</th>
             </tr>
           </thead>
           <tbody>
             {players.map((p) => (
               <tr key={p.id} className="border-t">
-                <td className="sticky left-0 z-10 whitespace-nowrap bg-white p-2 font-medium">
-                  {p.first_name} {p.last_name}
-                </td>
+                <td className="sticky left-0 z-10 whitespace-nowrap bg-white p-2 font-medium">{p.first_name}</td>
+                <td className="sticky left-[70px] z-10 whitespace-nowrap bg-white p-2 font-medium">{p.last_name}</td>
                 {days.map((d) => {
                   const m = cellIndex[`${p.id}_${d}`];
+                  const isAvailUnassigned = !m && availIndex.has(`${p.id}_${d}`);
                   const isOverloaded = overloaded.has(`${p.id}_${d}`);
                   const isSelected = selected?.playerId === p.id && selected?.date === d;
-                  const others = m ? m.match_players.filter((mp: any) => mp.player_id !== p.id).map((mp: any) => shortName(mp.players)) : [];
+                  const color = m
+                    ? MATCH_PALETTE[m.match_number % MATCH_PALETTE.length]
+                    : isAvailUnassigned
+                    ? UNASSIGNED_COLOR
+                    : "";
                   return (
                     <td key={d} className="p-1 text-center">
                       <button
+                        disabled={!m}
                         onClick={() => m && setSelected(isSelected ? null : { playerId: p.id, date: d })}
-                        className={`block w-full rounded px-1 py-1 text-left ${m ? STATUS_COLORS[m.status] : "text-stone-300"} ${isOverloaded ? "ring-2 ring-orange-400" : ""} ${isSelected ? "outline outline-2 outline-purple-500" : ""}`}
+                        className={`block w-full whitespace-nowrap rounded px-1.5 py-1 text-left ${color} ${isOverloaded ? "ring-2 ring-orange-400" : ""} ${isSelected ? "outline outline-2 outline-purple-500" : ""}`}
                       >
-                        {m ? others.join(", ") : "·"}
+                        {m ? `${p.first_name} M${m.match_number}` : isAvailUnassigned ? `${p.first_name} Unassigned` : ""}
                       </button>
                     </td>
                   );
                 })}
+                <td className="p-2 text-center">{p.ranking ?? "—"}</td>
+                <td className="p-2 text-center">{p.days_per_week ?? "—"}</td>
+                <td className="p-2 text-center">{p.days_in_a_row ?? "—"}</td>
+                <td className="p-2 text-center">{p.zip ?? "—"}</td>
+                <td className="whitespace-nowrap p-2">{p.phone ?? "—"}</td>
+                <td className="whitespace-nowrap p-2">{p.email}</td>
+                <td className="whitespace-nowrap p-2 italic text-stone-500">{p.notes ?? ""}</td>
               </tr>
             ))}
           </tbody>
@@ -284,10 +304,8 @@ export default function MatchMatrixPage() {
       {selectedMatch && selectedPlayer && (
         <div className="rounded-md border bg-stone-50 p-4 space-y-3">
           <p className="font-semibold">
-            Match M{selectedMatch.id.slice(0, 4)} · {selectedMatch.match_date} · {selectedMatch.time_slot} ·{" "}
-            <span className={`rounded-full px-2 py-0.5 text-xs ${STATUS_COLORS[selectedMatch.status]}`}>
-              {selectedMatch.status.toUpperCase()}
-            </span>
+            Match M{selectedMatch.match_number} · {selectedMatch.match_date} · {selectedMatch.time_slot} ·{" "}
+            <span className="rounded-full bg-stone-200 px-2 py-0.5 text-xs">{selectedMatch.status.toUpperCase()}</span>
           </p>
           <ul className="text-sm">
             {selectedMatch.match_players.map((mp: any) => (
