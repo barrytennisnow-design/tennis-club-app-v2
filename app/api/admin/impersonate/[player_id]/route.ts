@@ -67,5 +67,5 @@ export async function GET(request: Request, { params }: { params: { player_id: s
     maxAge: 60 * 60 * 4,
   });
 
-  return NextResponse.redirect(`${origin}/profile`);
+  return NextResponse.redirect(`${origin}/matches`);
 }

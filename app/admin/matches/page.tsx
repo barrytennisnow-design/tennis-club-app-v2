@@ -2,131 +2,125 @@
 
 import { useEffect, useState } from "react";
 import { createClient } from "@/lib/supabaseClient";
+import { formatShortDate } from "@/lib/formatDate";
 
-export default function MyMatchesPage() {
+export default function AdminMatchesPage() {
   const supabase = createClient();
-  const [player, setPlayer] = useState<any>(null);
-  const [myMatches, setMyMatches] = useState<any[]>([]);
-  const [rosterByMatch, setRosterByMatch] = useState<Record<string, any[]>>({});
-  const [loading, setLoading] = useState(true);
-  const [busyId, setBusyId] = useState<string | null>(null);
+  const [matches, setMatches] = useState<any[]>([]);
 
   async function load() {
-    const { data: userData } = await supabase.auth.getUser();
-    if (!userData.user) {
-      setLoading(false);
-      return;
-    }
-    const { data: p } = await supabase
-      .from("players")
-      .select("*")
-      .eq("auth_user_id", userData.user.id)
-      .single();
-    setPlayer(p);
+    const { data } = await supabase
+      .from("matches")
+      .select("*, court:courts(id, name), match_players(id, response_status, decline_reason, player_id, players(id, first_name, last_name))")
+      .not("status", "eq", "draft")
+      .order("match_date", { ascending: false });
+    setMatches(data ?? []);
+  }
 
-    if (p) {
-      const { data: mp } = await supabase
-        .from("match_players")
-        .select("id, response_status, decline_reason, match_id, matches!inner(id, match_date, time_slot, status, proposed_at, confirmed_at, cancelled_at, auto_cancel_hours, nudge_count, court:courts(name))")
-        .eq("player_id", p.id);
-      const nonDraftMatches = (mp ?? []).filter((row: any) => row.matches?.status !== "draft");
-      setMyMatches(nonDraftMatches);
-
-      // Full roster (all 4 players + their responses) for each match,
-      // shown like the old sheet's "Proposed Matches" tab -- everyone
-      // on one row, e.g. "Mike Tune : ACCEPTED".
-      const matchIds = nonDraftMatches.map((row: any) => row.match_id);
-      if (matchIds.length > 0) {
-        const { data: allRoster } = await supabase
-          .from("match_players")
-          .select("match_id, response_status, players(first_name, last_name)")
-          .in("match_id", matchIds);
-        const grouped: Record<string, any[]> = {};
-        for (const row of allRoster ?? []) {
-          if (!grouped[row.match_id]) grouped[row.match_id] = [];
-          grouped[row.match_id].push(row);
-        }
-        setRosterByMatch(grouped);
-      }
-    }
-    setLoading(false);
+  async function updateTimeout(matchId: string, hours: number) {
+    await supabase.from("matches").update({ auto_cancel_hours: hours }).eq("id", matchId);
+    load();
   }
 
   useEffect(() => {
     load();
   }, []);
 
-  async function respond(matchPlayerId: string, response: "accepted" | "declined") {
-    let declineReason: string | null = null;
-    if (response === "declined") {
-      declineReason = window.prompt("Optional: let the group know why you're declining") || null;
-    }
-    setBusyId(matchPlayerId);
-    await fetch("/api/respond-match", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ match_player_id: matchPlayerId, response, decline_reason: declineReason }),
-    });
-    setBusyId(null);
-    load();
-  }
-
-  if (loading) return <p>Loading...</p>;
-  if (!player) return <p>Please <a href="/login" className="underline">log in</a>.</p>;
+  const statusStyles: Record<string, string> = {
+    draft: "bg-stone-200 text-stone-700",
+    proposed: "bg-yellow-100 text-yellow-800",
+    confirmed: "bg-green-100 text-green-800",
+    cancelled: "bg-red-100 text-red-700",
+  };
 
   return (
-    <div className="space-y-4">
-      <h1 className="text-xl font-bold">My Matches</h1>
-      {myMatches.length === 0 && <p className="text-stone-500">No match invites yet.</p>}
-      {myMatches.map((mp) => {
-        const roster = rosterByMatch[mp.match_id] ?? [];
-        const deadline = mp.matches.proposed_at && mp.matches.auto_cancel_hours
-          ? new Date(new Date(mp.matches.proposed_at).getTime() + mp.matches.auto_cancel_hours * 3600000)
-          : null;
-        return (
-          <div key={mp.id} className="rounded-md border p-3">
-            <div className="flex items-center justify-between">
-              <p className="font-medium">
-                Match M{mp.matches.id.slice(0, 4)} · {mp.matches.match_date} · {mp.matches.time_slot} · {mp.matches.court?.name ?? "Court TBD"}
-              </p>
-              <span className="rounded-full bg-stone-100 px-2 py-0.5 text-xs">
-                Match: {mp.matches.status}
-              </span>
-            </div>
+    <div className="space-y-6">
+      <div className="flex items-center justify-between">
+        <h1 className="text-xl font-bold">Matches Tracking</h1>
+        <a href="/admin/grid" className="rounded-md bg-court-green px-4 py-2 text-sm text-white">
+          Go to Match Matrix (generate / edit matches) →
+        </a>
+      </div>
 
-            <div className="mt-1 text-xs text-stone-500">
-              {mp.matches.proposed_at && <span>Proposed: {new Date(mp.matches.proposed_at).toLocaleString()}</span>}
-              {deadline && mp.matches.status === "proposed" && (
-                <span className="ml-3">Respond by: {deadline.toLocaleString()}</span>
-              )}
-              {mp.matches.confirmed_at && <span className="ml-3">Confirmed: {new Date(mp.matches.confirmed_at).toLocaleString()}</span>}
-              {mp.matches.cancelled_at && <span className="ml-3">Cancelled: {new Date(mp.matches.cancelled_at).toLocaleString()}</span>}
-              {mp.matches.nudge_count > 0 && <span className="ml-3">Nudges sent: {mp.matches.nudge_count}</span>}
-            </div>
-
-            {/* All 4 players + status, formatted like the old sheet's
-                "Proposed Matches" tab: "Name : STATUS" per player */}
-            <ul className="mt-2 space-y-0.5 text-sm text-stone-700">
-              {roster.map((r: any, i: number) => (
-                <li key={i}>
-                  {r.players.first_name} {r.players.last_name} : <strong>{r.response_status.toUpperCase()}</strong>
-                </li>
-              ))}
-            </ul>
-
-            {mp.decline_reason && <p className="mt-1 text-sm italic text-stone-500">Your reason: "{mp.decline_reason}"</p>}
-
-            {mp.matches.status === "proposed" && mp.response_status === "proposed" && (
-              <div className="mt-2 flex gap-2">
-                <button disabled={busyId === mp.id} onClick={() => respond(mp.id, "accepted")}
-                  className="rounded-md bg-court-green px-3 py-1 text-sm text-white disabled:opacity-50">Accept</button>
-                <button disabled={busyId === mp.id} onClick={() => respond(mp.id, "declined")}
-                  className="rounded-md border border-stone-300 px-3 py-1 text-sm disabled:opacity-50">Decline</button>
-              </div>
+      {/* Read-only overview -- all editing (propose/cancel/swap/court)
+          happens on the Match Matrix page now. */}
+      <div className="overflow-x-auto rounded-md border">
+        <table className="w-full min-w-[900px] text-xs">
+          <thead className="bg-stone-100 text-left text-stone-600">
+            <tr>
+              <th className="p-2">Match</th>
+              <th className="p-2">Day</th>
+              <th className="p-2">Time</th>
+              <th className="p-2">Court</th>
+              <th className="p-2">Player 1</th>
+              <th className="p-2">Player 2</th>
+              <th className="p-2">Player 3</th>
+              <th className="p-2">Player 4</th>
+              <th className="p-2">Status</th>
+              <th className="p-2">Timeout (hrs)</th>
+              <th className="p-2">Proposed</th>
+              <th className="p-2">Confirmed</th>
+              <th className="p-2">Cancelled</th>
+            </tr>
+          </thead>
+          <tbody>
+            {matches.map((m) => {
+              const rowColor =
+                m.status === "confirmed" ? "bg-green-50" :
+                m.status === "proposed" ? "bg-yellow-50" :
+                m.status === "cancelled" ? "bg-red-50" :
+                "bg-stone-50";
+              const players = [0, 1, 2, 3].map((i) => m.match_players[i]);
+              return (
+                <tr key={m.id} className={`border-t ${rowColor}`}>
+                  <td className="p-2 font-mono">M{m.match_number}</td>
+                  <td className="p-2">{formatShortDate(m.match_date)}</td>
+                  <td className="p-2">{m.time_display || m.time_slot}</td>
+                  <td className="p-2">{m.court?.name ?? "TBD"}</td>
+                  {players.map((mp: any, i: number) => (
+                    <td key={i} className="p-2">
+                      {mp ? (
+                        <>
+                          {mp.players ? `${mp.players.first_name} ${mp.players.last_name}` : 'Unknown Player'}
+                          {m.status !== "draft" && (
+                            <span className="text-stone-400"> : {mp.response_status.toUpperCase()}</span>
+                          )}
+                        </>
+                      ) : (
+                        "—"
+                      )}
+                    </td>
+                  ))}
+                  <td className="p-2">
+                    <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${statusStyles[m.status]}`}>
+                      {m.status.toUpperCase()}
+                    </span>
+                  </td>
+                  <td className="p-2">
+                    {m.status === "proposed" ? (
+                      <input
+                        type="number"
+                        className="w-16 rounded border border-stone-300 px-1 py-0.5 text-xs"
+                        value={m.auto_cancel_hours ?? 24}
+                        onChange={(e) => updateTimeout(m.id, parseInt(e.target.value) || 24)}
+                        min="1"
+                      />
+                    ) : (
+                      <span className="text-stone-400">{m.auto_cancel_hours ?? 24}</span>
+                    )}
+                  </td>
+                  <td className="p-2">{m.proposed_at ? new Date(m.proposed_at).toLocaleString() : "—"}</td>
+                  <td className="p-2">{m.confirmed_at ? new Date(m.confirmed_at).toLocaleString() : "—"}</td>
+                  <td className="p-2">{m.cancelled_at ? new Date(m.cancelled_at).toLocaleString() : "—"}</td>
+                </tr>
+              );
+            })}
+            {matches.length === 0 && (
+              <tr><td colSpan={13} className="p-4 text-center text-stone-400">No matches yet.</td></tr>
             )}
-          </div>
-        );
-      })}
+          </tbody>
+        </table>
+      </div>
     </div>
   );
 }

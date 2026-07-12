@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { createClient } from "@/lib/supabaseClient";
+import { formatShortDate } from "@/lib/formatDate";
 
 const RANKING_OPTIONS = ["2.5","2.75","3.0","3.25","3.5","3.75","4.0","4.25","4.5"];
 const STATUS_OPTIONS = ["pending", "active", "paused", "declined"];
@@ -103,8 +104,7 @@ export default function RosterPage() {
   const filtered = filter === "all" ? players : players.filter((p) => p.status === filter);
 
   function formatDate(v: string | null) {
-    if (!v) return "—";
-    return new Date(v).toLocaleDateString();
+    return formatShortDate(v);
   }
 
   function renderCell(p: any, key: string) {

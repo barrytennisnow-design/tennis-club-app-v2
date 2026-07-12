@@ -2,20 +2,14 @@
 
 import { useEffect, useState } from "react";
 import { createClient } from "@/lib/supabaseClient";
-
-// Display text for each time slot -- matches the warmup/start-play
-// format from the old system. Keep in sync with lib/ics.ts's actual
-// start/end times used for calendar invites.
-const TIME_SLOT_DISPLAY: Record<string, string> = {
-  morning: "8:00am warmup, 8:15am start play",
-};
+import { formatShortDate } from "@/lib/formatDate";
+import { formatPhone } from "@/lib/formatPhone";
+import { buildMatchIcs } from "@/lib/ics";
 
 function formatLongDate(dateStr: string) {
-  // 'YYYY-MM-DD' -> 'Saturday, 7/11/2026'
   const d = new Date(dateStr + "T00:00:00");
   const weekday = d.toLocaleDateString(undefined, { weekday: "long" });
-  const short = d.toLocaleDateString(undefined, { month: "numeric", day: "numeric", year: "numeric" });
-  return `${weekday}, ${short}`;
+  return `${weekday}, ${formatShortDate(dateStr)}`;
 }
 
 export default function MyMatchesPage() {
@@ -23,10 +17,14 @@ export default function MyMatchesPage() {
   const [player, setPlayer] = useState<any>(null);
   const [myMatches, setMyMatches] = useState<any[]>([]);
   const [rosterByMatch, setRosterByMatch] = useState<Record<string, any[]>>({});
+  const [timeDisplay, setTimeDisplay] = useState("morning");
   const [loading, setLoading] = useState(true);
   const [busyId, setBusyId] = useState<string | null>(null);
 
   async function load() {
+    const { data: settings } = await supabase.from("club_settings").select("default_time_display").single();
+    if (settings) setTimeDisplay(settings.default_time_display);
+
     const { data: userData } = await supabase.auth.getUser();
     if (!userData.user) {
       setLoading(false);
@@ -42,7 +40,7 @@ export default function MyMatchesPage() {
     if (p) {
       const { data: mp } = await supabase
         .from("match_players")
-        .select("id, response_status, decline_reason, match_id, matches!inner(id, match_date, time_slot, status, proposed_at, confirmed_at, cancelled_at, auto_cancel_hours, nudge_count, court:courts(name))")
+        .select("id, response_status, decline_reason, match_id, matches!inner(id, match_number, match_date, time_slot, time_display, status, proposed_at, confirmed_at, cancelled_at, auto_cancel_hours, nudge_count, court:courts(name))")
         .eq("player_id", p.id);
       const nonDraftMatches = (mp ?? []).filter((row: any) => row.matches?.status !== "draft");
       // Most recent / soonest first, matching the old system's list
@@ -51,16 +49,16 @@ export default function MyMatchesPage() {
 
       const matchIds = nonDraftMatches.map((row: any) => row.match_id);
       if (matchIds.length > 0) {
-        const { data: allRoster } = await supabase
-          .from("match_players")
-          .select("match_id, response_status, players(first_name, last_name, phone)")
-          .in("match_id", matchIds);
-        const grouped: Record<string, any[]> = {};
-        for (const row of allRoster ?? []) {
-          if (!grouped[row.match_id]) grouped[row.match_id] = [];
-          grouped[row.match_id].push(row);
+        const response = await fetch(`/api/match-roster?match_ids=${matchIds.join(",")}`);
+        if (response.ok) {
+          const { roster } = await response.json();
+          const grouped: Record<string, any[]> = {};
+          for (const row of roster ?? []) {
+            if (!grouped[row.match_id]) grouped[row.match_id] = [];
+            grouped[row.match_id].push(row);
+          }
+          setRosterByMatch(grouped);
         }
-        setRosterByMatch(grouped);
       }
     }
     setLoading(false);
@@ -85,6 +83,28 @@ export default function MyMatchesPage() {
     load();
   }
 
+  function downloadIcs(match: any, roster: any[]) {
+    const playerNames = roster
+      .filter((r: any) => r.players)
+      .map((r: any) => `${r.players.first_name} ${r.players.last_name}`);
+    const ics = buildMatchIcs({
+      matchId: match.id,
+      matchDate: match.match_date,
+      timeSlot: match.time_slot,
+      courtName: match.court?.name ?? "Court TBD",
+      playerNames,
+    });
+    const blob = new Blob([ics], { type: "text/calendar" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `match-${match.match_number}.ics`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  }
+
   if (loading) return <p>Loading...</p>;
   if (!player) return <p>Please <a href="/login" className="underline">log in</a>.</p>;
 
@@ -102,7 +122,7 @@ export default function MyMatchesPage() {
         return (
           <div key={mp.id} className="rounded-md border p-4">
             <p className="font-semibold">
-              Match ID: M{mp.matches.id.slice(0, 4).toUpperCase()}{" "}
+              Match ID: M{mp.matches.match_number}{" "}
               <span className={
                 mp.matches.status === "confirmed" ? "text-green-700" :
                 mp.matches.status === "cancelled" ? "text-red-700" :
@@ -111,19 +131,17 @@ export default function MyMatchesPage() {
                 {mp.matches.status.toUpperCase()}
               </span>
             </p>
+            <p>Date: {formatLongDate(mp.matches.match_date)}</p>
+            <p>Time: {mp.matches.time_display || timeDisplay}</p>
             <p>Court: {mp.matches.court?.name ?? "TBD"}</p>
-            <p>
-              Date &amp; Time: {formatLongDate(mp.matches.match_date)} at{" "}
-              {TIME_SLOT_DISPLAY[mp.matches.time_slot] ?? mp.matches.time_slot}
-            </p>
 
             <p className="mt-3 font-medium">Players:</p>
             <ul className="ml-4 list-disc space-y-0.5">
               {roster.map((r: any, i: number) => (
                 <li key={i}>
-                  {r.players.first_name} {r.players.last_name}{" "}
+                  {r.players ? `${r.players.first_name} ${r.players.last_name}` : 'Unknown Player'}{" "}
                   Status: <strong>{r.response_status.toUpperCase()}</strong>
-                  {r.players.phone && <> | Phone: {r.players.phone}</>}
+                  {r.players?.phone && <> | Phone: {formatPhone(r.players.phone)}</>}
                 </li>
               ))}
             </ul>
@@ -152,10 +170,18 @@ export default function MyMatchesPage() {
             )}
 
             {mp.matches.status === "confirmed" && (
-              <p className="mt-3 text-sm text-stone-500">
-                If you can not make it to a confirmed match please contact the other players in the
-                match to cancel the match or arrange a sub player.
-              </p>
+              <div className="mt-3 space-y-3">
+                <button
+                  onClick={() => downloadIcs(mp.matches, roster)}
+                  className="rounded-md bg-court-green px-3 py-1 text-sm text-white"
+                >
+                  Download Calendar Invite (.ics)
+                </button>
+                <p className="text-sm text-stone-500">
+                  If you can not make it to a confirmed match please contact the other players in the
+                  match to cancel the match or arrange a sub player.
+                </p>
+              </div>
             )}
           </div>
         );

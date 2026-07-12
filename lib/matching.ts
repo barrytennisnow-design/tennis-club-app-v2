@@ -25,16 +25,34 @@ export interface GenerateMatchesParams {
 }
 
 export async function generateMatches({ supabaseAdmin, startDate, endDate }: GenerateMatchesParams) {
-  // Wipe existing DRAFT matches so this run starts clean. Their
-  // match_players rows cascade-delete automatically (FK ON DELETE
-  // CASCADE). Proposed/confirmed/cancelled matches are untouched.
-  const { data: oldDrafts } = await supabaseAdmin.from("matches").select("id").eq("status", "draft");
-  if (oldDrafts && oldDrafts.length > 0) {
-    await supabaseAdmin.from("matches").delete().in("id", oldDrafts.map((m: any) => m.id));
+  // Get the highest existing match_number to start numbering from
+  const { data: maxMatch } = await supabaseAdmin
+    .from("matches")
+    .select("match_number")
+    .order("match_number", { ascending: false })
+    .limit(1)
+    .single();
+  let nextMatchNumber = (maxMatch?.match_number ?? 0) + 1;
+
+  // Wipe existing DRAFT matches so this run starts clean, AND clean
+  // out CANCELLED matches too -- their players are already free to
+  // be redrafted (cancelled doesn't lock anyone), this just clears
+  // the clutter so old cancelled matches don't pile up forever.
+  const { data: staleMatches } = await supabaseAdmin
+    .from("matches")
+    .select("id")
+    .in("status", ["draft", "cancelled"]);
+  if (staleMatches && staleMatches.length > 0) {
+    await supabaseAdmin.from("matches").delete().in("id", staleMatches.map((m: any) => m.id));
   }
+
+  const { data: settings } = await supabaseAdmin.from("club_settings").select("*").single();
 
   const { data: courts } = await supabaseAdmin.from("courts").select("*").order("name");
   const courtList = courts && courts.length > 0 ? courts : [{ id: null, name: "Court TBD" }];
+  const defaultCourt = settings?.default_court_id
+    ? courtList.find((c: any) => c.id === settings.default_court_id)
+    : null;
 
   const { data: availabilityRows } = await supabaseAdmin
     .from("availability")
@@ -71,12 +89,13 @@ export async function generateMatches({ supabaseAdmin, startDate, endDate }: Gen
     let created = 0;
     for (let i = 0; i + 4 <= players.length; i += 4) {
       const group = players.slice(i, i + 4);
-      const court = courtList[courtCursor % courtList.length];
+      const court = defaultCourt ?? courtList[courtCursor % courtList.length];
       courtCursor++;
 
       const { data: match, error: matchError } = await supabaseAdmin
         .from("matches")
         .insert({
+          match_number: nextMatchNumber++,
           match_date: date,
           time_slot,
           court_id: court.id,

@@ -54,5 +54,5 @@ export async function GET(request: Request, { params }: { params: { token: strin
 
   await ensurePlayerAuthLinked(admin, player.id, linkData.user.id);
 
-  return NextResponse.redirect(`${origin}/profile`);
+  return NextResponse.redirect(`${origin}/matches`);
 }

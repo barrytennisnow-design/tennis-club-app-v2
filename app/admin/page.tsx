@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { createClient } from "@/lib/supabaseClient";
+import { formatPhone } from "@/lib/formatPhone";
 
 export default function AdminHome() {
   const supabase = createClient();
@@ -65,9 +66,10 @@ export default function AdminHome() {
   return (
     <div className="space-y-8">
       <div className="flex gap-4 text-sm">
-        <Link href="/admin/roster" className="underline text-court-green">Full Roster</Link>
+        <Link href="/admin/grid" className="underline text-court-green">Match Matrix</Link>
         <Link href="/admin/matches" className="underline text-court-green">Matches</Link>
-        <Link href="/admin/grid" className="underline text-court-green">Match Grid</Link>
+        <Link href="/admin/roster" className="underline text-court-green">Roster</Link>
+        <Link href="/admin/settings" className="underline text-court-green">Settings</Link>
       </div>
 
       <div>
@@ -78,7 +80,7 @@ export default function AdminHome() {
             <div key={p.id} className="flex items-center justify-between rounded-md border p-3">
               <div>
                 <p className="font-medium">{p.first_name} {p.last_name}</p>
-                <p className="text-sm text-stone-500">{p.email} · {p.phone}</p>
+                <p className="text-sm text-stone-500">{p.email} · {formatPhone(p.phone)}</p>
                 <p className="text-sm text-stone-500">
                   Self-rated: {p.self_reported_ranking ?? "—"} · Wants {p.days_per_week} days/week
                 </p>

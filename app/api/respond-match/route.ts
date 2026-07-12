@@ -56,7 +56,7 @@ export async function POST(request: Request) {
   if (!updatedMatch) return NextResponse.json({ ok: true });
 
   if (updatedMatch.status === "confirmed") {
-    const playerNames = updatedMatch.match_players.map((mp: any) => `${mp.players.first_name} ${mp.players.last_name}`);
+    const playerNames = updatedMatch.match_players.map((mp: any) => mp.players ? `${mp.players.first_name} ${mp.players.last_name}` : 'Unknown');
     const ics = buildMatchIcs({
       matchId: mpRow.match_id,
       matchDate: updatedMatch.match_date,
@@ -67,6 +67,7 @@ export async function POST(request: Request) {
     const icsBase64 = Buffer.from(ics).toString("base64");
 
     for (const mp of updatedMatch.match_players) {
+      if (!mp.players) continue;
       const teammates = playerNames.filter((n: string) => n !== `${mp.players.first_name} ${mp.players.last_name}`);
       const { subject, html } = matchConfirmedEmail({
         firstName: mp.players.first_name,
@@ -85,6 +86,7 @@ export async function POST(request: Request) {
     }
   } else if (updatedMatch.status === "cancelled" && response === "declined") {
     for (const mp of updatedMatch.match_players) {
+      if (!mp.players) continue;
       const { subject, html } = matchCancelledEmail({
         firstName: mp.players.first_name,
         matchDate: updatedMatch.match_date,
