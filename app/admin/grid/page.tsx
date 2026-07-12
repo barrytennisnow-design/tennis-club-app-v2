@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { createClient } from "@/lib/supabaseClient";
+import { formatPhone } from "@/lib/formatPhone";
 import { formatShortDateWithWeekday } from "@/lib/formatDate";
 
 const TIME_PRESETS = [
@@ -415,7 +416,7 @@ export default function MatchMatrixPage() {
                 <td className="px-1.5 py-0 text-center">{p.days_per_week ?? "—"}</td>
                 <td className="px-1.5 py-0 text-center">{p.days_in_a_row ?? "—"}</td>
                 <td className="px-1.5 py-0 text-center">{p.zip ?? "—"}</td>
-                <td className="whitespace-nowrap px-1.5 py-0">{p.phone ?? "—"}</td>
+                <td className="whitespace-nowrap px-1.5 py-0">{formatPhone(p.phone) ?? "—"}</td>
                 <td className="whitespace-nowrap px-1.5 py-0">{p.email}</td>
                 <td className="whitespace-nowrap px-1.5 py-0 italic text-stone-500">{p.notes ?? ""}</td>
               </tr>

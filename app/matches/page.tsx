@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { createClient } from "@/lib/supabaseClient";
 import { formatShortDate } from "@/lib/formatDate";
+import { formatPhone } from "@/lib/formatPhone";
 
 function formatLongDate(dateStr: string) {
   const d = new Date(dateStr + "T00:00:00");
@@ -47,16 +48,16 @@ export default function MyMatchesPage() {
 
       const matchIds = nonDraftMatches.map((row: any) => row.match_id);
       if (matchIds.length > 0) {
-        const { data: allRoster } = await supabase
-          .from("match_players")
-          .select("match_id, response_status, players(first_name, last_name, phone)")
-          .in("match_id", matchIds);
-        const grouped: Record<string, any[]> = {};
-        for (const row of allRoster ?? []) {
-          if (!grouped[row.match_id]) grouped[row.match_id] = [];
-          grouped[row.match_id].push(row);
+        const response = await fetch(`/api/match-roster?match_ids=${matchIds.join(",")}`);
+        if (response.ok) {
+          const { roster } = await response.json();
+          const grouped: Record<string, any[]> = {};
+          for (const row of roster ?? []) {
+            if (!grouped[row.match_id]) grouped[row.match_id] = [];
+            grouped[row.match_id].push(row);
+          }
+          setRosterByMatch(grouped);
         }
-        setRosterByMatch(grouped);
       }
     }
     setLoading(false);
@@ -117,7 +118,7 @@ export default function MyMatchesPage() {
                 <li key={i}>
                   {r.players ? `${r.players.first_name} ${r.players.last_name}` : 'Unknown Player'}{" "}
                   Status: <strong>{r.response_status.toUpperCase()}</strong>
-                  {r.players?.phone && <> | Phone: {r.players.phone}</>}
+                  {r.players?.phone && <> | Phone: {formatPhone(r.players.phone)}</>}
                 </li>
               ))}
             </ul>

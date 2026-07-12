@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { createClient } from "@/lib/supabaseClient";
+import { formatPhone } from "@/lib/formatPhone";
 
 const RANKING_OPTIONS = ["2.5","2.75","3.0","3.25","3.5","3.75","4.0","4.25","4.5"];
 
@@ -105,6 +106,7 @@ export default function ProfilePage() {
         Phone
         <input className="input mt-1 w-full" value={player.phone ?? ""}
           onChange={(e) => setPlayer({ ...player, phone: e.target.value })} />
+        {player.phone && <p className="text-xs text-stone-500 mt-1">Formatted: {formatPhone(player.phone)}</p>}
       </label>
 
       <label className="block text-sm font-medium">
