@@ -17,9 +17,21 @@ function isoDaysFromNow(n: number) {
   d.setDate(d.getDate() + n);
   return d.toISOString().slice(0, 10);
 }
-function nextNDays(n: number) {
-  const days = [];
-  for (let i = 0; i < n; i++) days.push(isoDaysFromNow(i));
+// Builds every date from start to end, inclusive. Used so the grid
+// ALWAYS shows exactly the range currently selected in the date
+// pickers -- previously the grid was hardcoded to "today + 30 days"
+// regardless of what range you generated matches for, so newly
+// created matches outside that fixed window silently never appeared.
+function daysBetween(start: string, end: string) {
+  const days: string[] = [];
+  const cur = new Date(start + "T00:00:00");
+  const last = new Date(end + "T00:00:00");
+  let guard = 0;
+  while (cur <= last && guard < 400) {
+    days.push(cur.toISOString().slice(0, 10));
+    cur.setDate(cur.getDate() + 1);
+    guard++;
+  }
   return days;
 }
 
@@ -49,12 +61,14 @@ export default function MatchMatrixPage() {
   const [generating, setGenerating] = useState(false);
   const [lastResult, setLastResult] = useState<string | null>(null);
   const [startDate, setStartDate] = useState(isoDaysFromNow(0));
-  const [endDate, setEndDate] = useState(isoDaysFromNow(7));
+  const [endDate, setEndDate] = useState(isoDaysFromNow(29));
+  const [viewStart, setViewStart] = useState(isoDaysFromNow(0));
+  const [viewEnd, setViewEnd] = useState(isoDaysFromNow(29));
   const [selected, setSelected] = useState<{ playerId: string; date: string } | null>(null);
   const [swapMode, setSwapMode] = useState(false);
   const [swapSlots, setSwapSlots] = useState<{ playerId: string; matchId: string | null; date: string; label: string }[]>([]);
   const [swapBusy, setSwapBusy] = useState(false);
-  const days = nextNDays(30);
+  const days = daysBetween(viewStart, viewEnd);
 
   async function load() {
     const { data: playerRows } = await supabase
@@ -98,7 +112,7 @@ export default function MatchMatrixPage() {
 
   useEffect(() => {
     load();
-  }, []);
+  }, [viewStart, viewEnd]);
 
   async function handleGenerate() {
     setGenerating(true);
@@ -113,7 +127,13 @@ export default function MatchMatrixPage() {
     if (json.ok) {
       const total = json.results.reduce((s: number, r: any) => s + r.matchesCreated, 0);
       setLastResult(`Built ${total} draft match(es) across ${json.results.length} day(s). Cancelled matches were cleared and their players redrafted.`);
-      load();
+      // Make sure the grid's visible window actually covers whatever
+      // range was just generated -- otherwise new matches could exist
+      // in the database but never show up on screen.
+      let expanded = false;
+      if (startDate < viewStart) { setViewStart(startDate); expanded = true; }
+      if (endDate > viewEnd) { setViewEnd(endDate); expanded = true; }
+      if (!expanded) load();
     } else {
       setLastResult(`Error: ${json.error}`);
     }
@@ -290,6 +310,7 @@ export default function MatchMatrixPage() {
       <h1 className="text-base font-bold">Match Matrix</h1>
 
       <div className="flex flex-wrap items-center gap-2 rounded-md border px-2 py-1.5 text-sm">
+        <span className="text-stone-500">Generate:</span>
         <input type="date" value={startDate} onChange={(e) => setStartDate(e.target.value)}
           className="rounded border border-stone-300 px-1.5 py-0.5 text-xs" />
         <span className="text-stone-400">to</span>
@@ -299,6 +320,13 @@ export default function MatchMatrixPage() {
           className="rounded-md bg-court-green px-3 py-1 text-xs text-white disabled:opacity-50">
           {generating ? "Generating..." : "Generate Match Matrix"}
         </button>
+
+        <span className="ml-2 text-stone-500">Showing:</span>
+        <input type="date" value={viewStart} onChange={(e) => setViewStart(e.target.value)}
+          className="rounded border border-stone-300 px-1.5 py-0.5 text-xs" />
+        <span className="text-stone-400">to</span>
+        <input type="date" value={viewEnd} onChange={(e) => setViewEnd(e.target.value)}
+          className="rounded border border-stone-300 px-1.5 py-0.5 text-xs" />
 
         <button
           onClick={() => { setSwapMode(!swapMode); setSwapSlots([]); setSelected(null); }}
