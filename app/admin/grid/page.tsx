@@ -5,24 +5,12 @@ import { createClient } from "@/lib/supabaseClient";
 import { formatPhone } from "@/lib/formatPhone";
 import { formatShortDateWithWeekday } from "@/lib/formatDate";
 
-const TIME_PRESETS = [
-  "7:00am warmup, 7:15am start play",
-  "8:00am warmup, 8:15am start play",
-  "9:00am warmup, 9:15am start play",
-  "4:00pm warmup, 4:15pm start play",
-  "5:00pm warmup, 5:15pm start play",
-];
-
 function isoDaysFromNow(n: number) {
   const d = new Date();
   d.setDate(d.getDate() + n);
   return d.toISOString().slice(0, 10);
 }
-// Builds every date from start to end, inclusive. Used so the grid
-// ALWAYS shows exactly the range currently selected in the date
-// pickers -- previously the grid was hardcoded to "today + 30 days"
-// regardless of what range you generated matches for, so newly
-// created matches outside that fixed window silently never appeared.
+
 function daysBetween(start: string, end: string) {
   const days: string[] = [];
   const cur = new Date(start + "T00:00:00");
@@ -36,16 +24,9 @@ function daysBetween(start: string, end: string) {
   return days;
 }
 
-// Same color palette style as the old sheet -- one color per match,
-// cycling through the set, NOT tied to status. "Unassigned" (available
-// but not yet in a match) always gets the light grey.
 const MATCH_PALETTE = [
-  "bg-[#FFE8D6]", // orange
-  "bg-[#D4EDDA]", // green
-  "bg-[#FFF3CD]", // yellow
-  "bg-[#D1ECF1]", // blue
-  "bg-[#F8D7DA]", // red
-  "bg-[#E5D4ED]", // purple
+  "bg-[#FFE8D6]", "bg-[#D4EDDA]", "bg-[#FFF3CD]", 
+  "bg-[#D1ECF1]", "bg-[#F8D7DA]", "bg-[#E5D4ED]",
 ];
 const UNASSIGNED_COLOR = "bg-[#F8F9FA]";
 
@@ -54,7 +35,9 @@ export default function MatchMatrixPage() {
   const [players, setPlayers] = useState<any[]>([]);
   const [matches, setMatches] = useState<any[]>([]);
   const [courts, setCourts] = useState<any[]>([]);
+  const [timePresets, setTimePresets] = useState<string[]>([]);
   const [defaultTimeDisplay, setDefaultTimeDisplay] = useState("");
+  const [defaultCourtId, setDefaultCourtId] = useState("");
   const [timeChoice, setTimeChoice] = useState<string>("");
   const [customTime, setCustomTime] = useState<string>("");
   const [availabilityByDay, setAvailabilityByDay] = useState<Record<string, any[]>>({});
@@ -70,8 +53,6 @@ export default function MatchMatrixPage() {
   const [swapMode, setSwapMode] = useState(false);
   const [swapSlots, setSwapSlots] = useState<{ playerId: string; matchId: string | null; date: string; label: string }[]>([]);
   const [swapBusy, setSwapBusy] = useState(false);
-  const [editingMatch, setEditingMatch] = useState<{ matchId: string; field: 'court' | 'time' } | null>(null);
-  const [tempCourt, setTempCourt] = useState<string>("");
   const [tempTime, setTempTime] = useState<string>("");
   const days = daysBetween(viewStart, viewEnd);
 
@@ -93,18 +74,22 @@ export default function MatchMatrixPage() {
       .gte("match_date", days[0])
       .lte("match_date", days[days.length - 1])
       .neq("status", "cancelled");
-    if (matchError) {
-      setLoadError(`Couldn't load matches: ${matchError.message}`);
-    } else {
-      setLoadError(null);
-    }
+    
+    if (matchError) setLoadError(`Couldn't load matches: ${matchError.message}`);
+    else setLoadError(null);
     setMatches(matchRows ?? []);
 
     const { data: courtRows } = await supabase.from("courts").select("*").order("name");
     setCourts(courtRows ?? []);
 
-    const { data: settingsRow } = await supabase.from("club_settings").select("default_time_display").single();
-    if (settingsRow) setDefaultTimeDisplay(settingsRow.default_time_display);
+    const { data: timeSlotRows } = await supabase.from("time_slots").select("description").order("name");
+    setTimePresets(timeSlotRows?.map(ts => ts.description) ?? []);
+
+    const { data: settingsRow } = await supabase.from("club_settings").select("default_time_display, default_court_id").single();
+    if (settingsRow) {
+      setDefaultTimeDisplay(settingsRow.default_time_display || "");
+      setDefaultCourtId(settingsRow.default_court_id || "");
+    }
 
     const { data: availRows } = await supabase
       .from("availability")
@@ -120,9 +105,7 @@ export default function MatchMatrixPage() {
     setLoading(false);
   }
 
-  useEffect(() => {
-    load();
-  }, [viewStart, viewEnd]);
+  useEffect(() => { load(); }, [viewStart, viewEnd]);
 
   async function handleGenerate() {
     setGenerating(true);
@@ -136,10 +119,7 @@ export default function MatchMatrixPage() {
     setGenerating(false);
     if (json.ok) {
       const total = json.results.reduce((s: number, r: any) => s + r.matchesCreated, 0);
-      setLastResult(`Built ${total} draft match(es) across ${json.results.length} day(s). Cancelled matches were cleared and their players redrafted.`);
-      // Make sure the grid's visible window actually covers whatever
-      // range was just generated -- otherwise new matches could exist
-      // in the database but never show up on screen.
+      setLastResult(`Built ${total} draft match(es) across ${json.results.length} day(s).`);
       let expanded = false;
       if (startDate < viewStart) { setViewStart(startDate); expanded = true; }
       if (endDate > viewEnd) { setViewEnd(endDate); expanded = true; }
@@ -149,14 +129,13 @@ export default function MatchMatrixPage() {
     }
   }
 
-  // player_id_date -> match they're in that day (if any)
   const cellIndex: Record<string, any> = {};
   for (const m of matches) {
     for (const mp of m.match_players) {
       cellIndex[`${mp.player_id}_${m.match_date}`] = m;
     }
   }
-  // player_id_date -> true if available that day but not in a match
+  
   const availIndex = new Set<string>();
   for (const key of Object.keys(availabilityByDay)) {
     const [date] = key.split("_");
@@ -165,9 +144,6 @@ export default function MatchMatrixPage() {
     }
   }
 
-  // Only show players available (or already matched) on at least one
-  // of the visible days -- keeps the grid focused on people who are
-  // actually relevant right now.
   const daySet = new Set(days);
   const relevantPlayerIds = new Set<string>();
   for (const key of Object.keys(availabilityByDay)) {
@@ -312,7 +288,6 @@ export default function MatchMatrixPage() {
       if (hasMatch) setSelected(selected?.playerId === playerId && selected?.date === date ? null : { playerId, date });
       return;
     }
-    // Swap mode: only draft-match players or Unassigned cells are eligible.
     if (!hasMatch && !isUnassigned) return;
     if (hasMatch && hasMatch.status !== "draft") return;
 
@@ -322,7 +297,7 @@ export default function MatchMatrixPage() {
 
     setSwapSlots((prev) => {
       const already = prev.find((s) => s.playerId === playerId && s.date === date);
-      if (already) return prev.filter((s) => s !== already); // click again to deselect
+      if (already) return prev.filter((s) => s !== already); 
       if (prev.length === 0) return [slot];
       if (prev.length === 1) {
         if (prev[0].date !== date) {
@@ -331,7 +306,7 @@ export default function MatchMatrixPage() {
         }
         return [prev[0], slot];
       }
-      return [slot]; // start fresh if 2 already picked
+      return [slot]; 
     });
   }
 
@@ -365,7 +340,6 @@ export default function MatchMatrixPage() {
       {loadError && (
         <p className="rounded bg-red-100 px-2 py-1 text-xs text-red-700">{loadError}</p>
       )}
-      <p className="text-xs text-stone-400">Debug: {matches.length} match(es) loaded for {days[0]} to {days[days.length - 1]}</p>
 
       <div className="flex flex-wrap items-center gap-2 rounded-md border px-2 py-1.5 text-sm">
         <span className="text-stone-500">Generate:</span>
@@ -407,8 +381,6 @@ export default function MatchMatrixPage() {
             <button onClick={() => setSwapSlots([])} className="text-purple-500 underline">clear</button>
           </div>
         )}
-
-        {lastResult && <span className="text-xs text-stone-500">{lastResult}</span>}
       </div>
 
       <div className="overflow-x-auto rounded-md border">
@@ -426,7 +398,7 @@ export default function MatchMatrixPage() {
               <th className="whitespace-nowrap px-1.5 py-0.5">Days/wk</th>
               <th className="whitespace-nowrap px-1.5 py-0.5">Days in row</th>
               <th className="whitespace-nowrap px-1.5 py-0.5">Zip</th>
-              <th className="whitespace-nowrap px-1.5 py-0.5">Phone</th>
+              <th className="whitespace-nowrap px-1.5 py-0.5">Cell Phone Number</th>
               <th className="whitespace-nowrap px-1.5 py-0.5">Email</th>
               <th className="whitespace-nowrap px-1.5 py-0.5">Notes</th>
             </tr>
@@ -447,10 +419,8 @@ export default function MatchMatrixPage() {
                     : isAvailUnassigned
                     ? UNASSIGNED_COLOR
                     : "";
-                  // Get player's response status for this match
                   const playerMatch = m ? m.match_players?.find((mp: any) => mp.player_id === p.id) : null;
                   const responseStatus = playerMatch?.response_status;
-                  // For draft matches, always show DRAFT status
                   const displayStatus = m?.status === "draft" ? "DRAFT" : (responseStatus ? responseStatus.toUpperCase() : m?.status?.toUpperCase() || "");
                   return (
                     <td key={d} className="p-0 text-center">
@@ -472,11 +442,9 @@ export default function MatchMatrixPage() {
                 <td className="whitespace-nowrap px-1.5 py-0 italic text-stone-500">{p.notes ?? ""}</td>
               </tr>
             ))}
-            {/* Match details row */}
             <tr className="border-t bg-stone-50">
               <td colSpan={3} className="px-2 py-1 font-medium text-stone-600">Match Details</td>
               {days.map((d) => {
-                // Get unique matches for this day
                 const dayMatches = matches.filter((m) => m.match_date === d);
                 const uniqueMatches = Array.from(new Map(dayMatches.map((m) => [m.id, m])).values());
                 return (
@@ -490,7 +458,7 @@ export default function MatchMatrixPage() {
                             {m.status === "draft" ? (
                               <select
                                 className="w-full rounded border border-stone-300 px-1 py-0.5 text-xs"
-                                defaultValue={m.court?.id ?? ""}
+                                defaultValue={m.court?.id ?? defaultCourtId ?? ""}
                                 onChange={(e) => handleInlineCourtChange(m.id, e.target.value)}
                               >
                                 <option value="">Court TBD</option>
@@ -505,7 +473,7 @@ export default function MatchMatrixPage() {
                                 defaultValue={
                                   !m.time_display
                                     ? "__default__"
-                                    : TIME_PRESETS.includes(m.time_display)
+                                    : timePresets.includes(m.time_display)
                                     ? m.time_display
                                     : "__custom__"
                                 }
@@ -514,7 +482,7 @@ export default function MatchMatrixPage() {
                                 }}
                               >
                                 <option value="__default__">Default ({defaultTimeDisplay})</option>
-                                {TIME_PRESETS.map((t) => <option key={t} value={t}>{t}</option>)}
+                                {timePresets.map((t) => <option key={t} value={t}>{t}</option>)}
                                 <option value="__custom__">Custom...</option>
                               </select>
                             ) : (
@@ -557,7 +525,7 @@ export default function MatchMatrixPage() {
           {selectedMatch.status === "draft" ? (
             <select
               className="w-full rounded border border-stone-300 px-1 py-0.5 text-sm"
-              defaultValue={selectedMatch.court?.id ?? ""}
+              defaultValue={selectedMatch.court?.id ?? defaultCourtId ?? ""}
               onChange={(e) => handleAssignCourt(e.target.value)}
             >
               <option value="">Court TBD</option>
@@ -574,7 +542,7 @@ export default function MatchMatrixPage() {
                 defaultValue={
                   !selectedMatch.time_display
                     ? "__default__"
-                    : TIME_PRESETS.includes(selectedMatch.time_display)
+                    : timePresets.includes(selectedMatch.time_display)
                     ? selectedMatch.time_display
                     : "__custom__"
                 }
@@ -584,10 +552,10 @@ export default function MatchMatrixPage() {
                 }}
               >
                 <option value="__default__">Default ({defaultTimeDisplay})</option>
-                {TIME_PRESETS.map((t) => <option key={t} value={t}>{t}</option>)}
+                {timePresets.map((t) => <option key={t} value={t}>{t}</option>)}
                 <option value="__custom__">Custom...</option>
               </select>
-              {(timeChoice === "__custom__" || (!TIME_PRESETS.includes(selectedMatch.time_display) && selectedMatch.time_display)) && (
+              {(timeChoice === "__custom__" || (!timePresets.includes(selectedMatch.time_display) && selectedMatch.time_display)) && (
                 <input
                   className="mt-1 w-full rounded border border-stone-300 px-1 py-0.5 text-sm"
                   defaultValue={selectedMatch.time_display || ""}
