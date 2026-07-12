@@ -57,6 +57,7 @@ export default function MatchMatrixPage() {
   const [timeChoice, setTimeChoice] = useState<string>("");
   const [customTime, setCustomTime] = useState<string>("");
   const [availabilityByDay, setAvailabilityByDay] = useState<Record<string, any[]>>({});
+  const [loadError, setLoadError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [generating, setGenerating] = useState(false);
   const [lastResult, setLastResult] = useState<string | null>(null);
@@ -82,12 +83,17 @@ export default function MatchMatrixPage() {
     });
     setPlayers(sorted);
 
-    const { data: matchRows } = await supabase
+    const { data: matchRows, error: matchError } = await supabase
       .from("matches")
       .select("id, match_number, match_date, time_slot, time_display, status, court:courts(id, name), match_players(id, player_id, response_status, players(id, first_name, last_name))")
       .gte("match_date", days[0])
       .lte("match_date", days[days.length - 1])
       .neq("status", "cancelled");
+    if (matchError) {
+      setLoadError(`Couldn't load matches: ${matchError.message}`);
+    } else {
+      setLoadError(null);
+    }
     setMatches(matchRows ?? []);
 
     const { data: courtRows } = await supabase.from("courts").select("*").order("name");
@@ -308,6 +314,11 @@ export default function MatchMatrixPage() {
   return (
     <div className="space-y-1.5">
       <h1 className="text-base font-bold">Match Matrix</h1>
+
+      {loadError && (
+        <p className="rounded bg-red-100 px-2 py-1 text-xs text-red-700">{loadError}</p>
+      )}
+      <p className="text-xs text-stone-400">Debug: {matches.length} match(es) loaded for {days[0]} to {days[days.length - 1]}</p>
 
       <div className="flex flex-wrap items-center gap-2 rounded-md border px-2 py-1.5 text-sm">
         <span className="text-stone-500">Generate:</span>
