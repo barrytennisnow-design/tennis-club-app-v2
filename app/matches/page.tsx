@@ -115,9 +115,9 @@ export default function MyMatchesPage() {
             <ul className="ml-4 list-disc space-y-0.5">
               {roster.map((r: any, i: number) => (
                 <li key={i}>
-                  {r.players.first_name} {r.players.last_name}{" "}
+                  {r.players ? `${r.players.first_name} ${r.players.last_name}` : 'Unknown Player'}{" "}
                   Status: <strong>{r.response_status.toUpperCase()}</strong>
-                  {r.players.phone && <> | Phone: {r.players.phone}</>}
+                  {r.players?.phone && <> | Phone: {r.players.phone}</>}
                 </li>
               ))}
             </ul>

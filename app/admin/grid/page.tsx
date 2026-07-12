@@ -477,7 +477,7 @@ export default function MatchMatrixPage() {
 
           {selectedMatch.match_players.map((mp: any) => (
             <p key={mp.id}>
-              {mp.players.first_name} {mp.players.last_name} :{" "}
+              {mp.players ? `${mp.players.first_name} ${mp.players.last_name}` : 'Unknown Player'} :{" "}
               {selectedMatch.status === "draft" ? "DRAFT" : mp.response_status.toUpperCase()}
             </p>
           ))}

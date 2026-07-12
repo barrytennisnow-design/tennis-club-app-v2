@@ -46,6 +46,7 @@ export async function GET(request: Request) {
         .eq("id", match.id);
 
       for (const mp of match.match_players) {
+        if (!mp.players) continue;
         const { subject, html } = matchCancelledEmail({
           firstName: mp.players.first_name,
           matchDate: match.match_date,
@@ -63,6 +64,7 @@ export async function GET(request: Request) {
       const pending = match.match_players.filter((mp: any) => mp.response_status === "proposed");
       if (pending.length > 0) {
         for (const mp of pending) {
+          if (!mp.players) continue;
           const { subject, html } = matchNudgeEmail({
             firstName: mp.players.first_name,
             matchDate: match.match_date,

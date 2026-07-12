@@ -35,8 +35,9 @@ export async function POST(request: Request) {
 
   const siteUrl = process.env.NEXT_PUBLIC_SITE_URL ?? "";
   for (const mp of match.match_players) {
+    if (!mp.players) continue;
     const teammates = match.match_players
-      .filter((other: any) => other.player_id !== mp.player_id)
+      .filter((other: any) => other.player_id !== mp.player_id && other.players)
       .map((other: any) => `${other.players.first_name} ${other.players.last_name}`);
 
     const { subject, html } = matchProposedEmail({

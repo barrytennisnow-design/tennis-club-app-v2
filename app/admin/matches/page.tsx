@@ -74,7 +74,7 @@ export default function AdminMatchesPage() {
                     <td key={i} className="p-2">
                       {mp ? (
                         <>
-                          {mp.players.first_name} {mp.players.last_name}
+                          {mp.players ? `${mp.players.first_name} ${mp.players.last_name}` : 'Unknown Player'}
                           {m.status !== "draft" && (
                             <span className="text-stone-400"> : {mp.response_status.toUpperCase()}</span>
                           )}

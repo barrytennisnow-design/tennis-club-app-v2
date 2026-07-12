@@ -34,6 +34,7 @@ export async function POST(request: Request) {
 
   if (!wasDraft) {
     for (const mp of match.match_players) {
+      if (!mp.players) continue;
       const { subject, html } = matchCancelledEmail({
         firstName: mp.players.first_name,
         matchDate: match.match_date,
