@@ -25,6 +25,15 @@ export interface GenerateMatchesParams {
 }
 
 export async function generateMatches({ supabaseAdmin, startDate, endDate }: GenerateMatchesParams) {
+  // Get the highest existing match_number to start numbering from
+  const { data: maxMatch } = await supabaseAdmin
+    .from("matches")
+    .select("match_number")
+    .order("match_number", { ascending: false })
+    .limit(1)
+    .single();
+  let nextMatchNumber = (maxMatch?.match_number ?? 0) + 1;
+
   // Wipe existing DRAFT matches so this run starts clean, AND clean
   // out CANCELLED matches too -- their players are already free to
   // be redrafted (cancelled doesn't lock anyone), this just clears
@@ -86,6 +95,7 @@ export async function generateMatches({ supabaseAdmin, startDate, endDate }: Gen
       const { data: match, error: matchError } = await supabaseAdmin
         .from("matches")
         .insert({
+          match_number: nextMatchNumber++,
           match_date: date,
           time_slot,
           court_id: court.id,
