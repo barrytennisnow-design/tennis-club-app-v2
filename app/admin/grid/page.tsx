@@ -451,7 +451,7 @@ export default function MatchMatrixPage() {
                   const playerMatch = m ? m.match_players?.find((mp: any) => mp.player_id === p.id) : null;
                   const responseStatus = playerMatch?.response_status;
                   // For draft matches, always show DRAFT status
-                  const displayStatus = m.status === "draft" ? "DRAFT" : (responseStatus ? responseStatus.toUpperCase() : m.status.toUpperCase());
+                  const displayStatus = m?.status === "draft" ? "DRAFT" : (responseStatus ? responseStatus.toUpperCase() : m?.status?.toUpperCase() || "");
                   return (
                     <td key={d} className="p-0 text-center">
                       <button
