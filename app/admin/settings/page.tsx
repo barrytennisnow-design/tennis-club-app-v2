@@ -3,27 +3,31 @@
 import { useEffect, useState } from "react";
 import { createClient } from "@/lib/supabaseClient";
 
-type Item = { id: string; sort_order: number; name?: string; label?: string };
-
 export default function SettingsPage() {
   const supabase = createClient();
-  const [courts, setCourts] = useState<Item[]>([]);
-  const [timePresets, setTimePresets] = useState<Item[]>([]);
+  const [courts, setCourts] = useState<any[]>([]);
+  const [timeSlots, setTimeSlots] = useState<any[]>([]);
   const [settings, setSettings] = useState<any>(null);
-  const [newCourtName, setNewCourtName] = useState("");
-  const [newTimeLabel, setNewTimeLabel] = useState("");
-  const [savedFlash, setSavedFlash] = useState<string | null>(null);
-
-  function flash(msg: string) {
-    setSavedFlash(msg);
-    setTimeout(() => setSavedFlash(null), 1500);
-  }
+  const [saving, setSaving] = useState(false);
+  const [saved, setSaved] = useState(false);
+  
+  // Modal states
+  const [showCourtModal, setShowCourtModal] = useState(false);
+  const [showTimeSlotModal, setShowTimeSlotModal] = useState(false);
+  const [editingCourt, setEditingCourt] = useState<any>(null);
+  const [editingTimeSlot, setEditingTimeSlot] = useState<any>(null);
+  
+  // Form states
+  const [courtName, setCourtName] = useState("");
+  const [courtAddress, setCourtAddress] = useState("");
+  const [timeSlotName, setTimeSlotName] = useState("");
+  const [timeSlotDesc, setTimeSlotDesc] = useState("");
 
   async function load() {
-    const { data: courtRows } = await supabase.from("courts").select("*").order("sort_order");
+    const { data: courtRows } = await supabase.from("courts").select("*").order("name");
     setCourts(courtRows ?? []);
-    const { data: timeRows } = await supabase.from("time_presets").select("*").order("sort_order");
-    setTimePresets(timeRows ?? []);
+    const { data: timeSlotRows } = await supabase.from("time_slots").select("*").order("name");
+    setTimeSlots(timeSlotRows ?? []);
     const { data: settingsRow } = await supabase.from("club_settings").select("*").single();
     setSettings(settingsRow);
   }
@@ -32,255 +36,356 @@ export default function SettingsPage() {
     load();
   }, []);
 
-  // --- Courts ---
+  async function save() {
+    setSaving(true);
+    setSaved(false);
+    await supabase
+      .from("club_settings")
+      .update({
+        default_court_id: settings.default_court_id || null,
+        default_time_display: settings.default_time_display,
+        default_timeout_hours: settings.default_timeout_hours || 24,
+        nudge_frequency_hours: settings.nudge_frequency_hours || 12,
+      })
+      .eq("id", true);
+    setSaving(false);
+    setSaved(true);
+  }
+
   async function addCourt() {
-    if (!newCourtName.trim()) return;
-    const maxOrder = courts.reduce((max, c) => Math.max(max, c.sort_order), 0);
-    await supabase.from("courts").insert({ name: newCourtName.trim(), sort_order: maxOrder + 1 });
-    setNewCourtName("");
-    flash("Court added");
-    load();
-  }
-  async function renameCourt(id: string, name: string) {
-    await supabase.from("courts").update({ name }).eq("id", id);
-    flash("Saved");
-    load();
-  }
-  async function deleteCourt(id: string, name?: string) {
-    if (!confirm(`Delete "${name}"? Any draft matches using it will show "Court TBD".`)) return;
-    await supabase.from("courts").delete().eq("id", id);
-    if (settings?.default_court_id === id) {
-      await supabase.from("club_settings").update({ default_court_id: null }).eq("id", true);
-    }
-    flash("Deleted");
-    load();
-  }
-  async function moveCourt(id: string, direction: -1 | 1) {
-    const idx = courts.findIndex((c) => c.id === id);
-    const swapIdx = idx + direction;
-    if (swapIdx < 0 || swapIdx >= courts.length) return;
-    const a = courts[idx], b = courts[swapIdx];
-    await supabase.from("courts").update({ sort_order: b.sort_order }).eq("id", a.id);
-    await supabase.from("courts").update({ sort_order: a.sort_order }).eq("id", b.id);
-    load();
-  }
-  async function setDefaultCourt(id: string) {
-    await supabase.from("club_settings").update({ default_court_id: id }).eq("id", true);
-    flash("Default court updated");
+    if (!courtName.trim()) return;
+    await supabase.from("courts").insert({ name: courtName.trim(), address: courtAddress.trim() || null });
+    setCourtName("");
+    setCourtAddress("");
+    setShowCourtModal(false);
     load();
   }
 
-  // --- Time presets ---
-  async function addTimePreset() {
-    if (!newTimeLabel.trim()) return;
-    const maxOrder = timePresets.reduce((max, t) => Math.max(max, t.sort_order), 0);
-    await supabase.from("time_presets").insert({ label: newTimeLabel.trim(), sort_order: maxOrder + 1 });
-    setNewTimeLabel("");
-    flash("Time option added");
-    load();
-  }
-  async function renameTimePreset(id: string, label: string) {
-    await supabase.from("time_presets").update({ label }).eq("id", id);
-    flash("Saved");
-    load();
-  }
-  async function deleteTimePreset(id: string, label?: string) {
-    if (!confirm(`Delete "${label}"?`)) return;
-    await supabase.from("time_presets").delete().eq("id", id);
-    if (settings?.default_time_display === label) {
-      await supabase.from("club_settings").update({ default_time_display: "" }).eq("id", true);
-    }
-    flash("Deleted");
-    load();
-  }
-  async function moveTimePreset(id: string, direction: -1 | 1) {
-    const idx = timePresets.findIndex((t) => t.id === id);
-    const swapIdx = idx + direction;
-    if (swapIdx < 0 || swapIdx >= timePresets.length) return;
-    const a = timePresets[idx], b = timePresets[swapIdx];
-    await supabase.from("time_presets").update({ sort_order: b.sort_order }).eq("id", a.id);
-    await supabase.from("time_presets").update({ sort_order: a.sort_order }).eq("id", b.id);
-    load();
-  }
-  async function setDefaultTime(label: string) {
-    await supabase.from("club_settings").update({ default_time_display: label }).eq("id", true);
-    flash("Default time updated");
+  async function updateCourt() {
+    if (!editingCourt || !courtName.trim()) return;
+    await supabase.from("courts").update({ name: courtName.trim(), address: courtAddress.trim() || null }).eq("id", editingCourt.id);
+    setCourtName("");
+    setCourtAddress("");
+    setEditingCourt(null);
+    setShowCourtModal(false);
     load();
   }
 
-  if (!settings) return <p className="text-stone-400">Loading settings...</p>;
+  async function deleteCourt(courtId: string) {
+    if (confirm("Are you sure you want to delete this court?")) {
+      await supabase.from("courts").delete().eq("id", courtId);
+      load();
+    }
+  }
+
+  async function setDefaultCourt(courtId: string) {
+    setSettings({ ...settings, default_court_id: courtId });
+    await save();
+  }
+
+  function openCourtModal(court?: any) {
+    if (court) {
+      setEditingCourt(court);
+      setCourtName(court.name);
+      setCourtAddress(court.address || "");
+    } else {
+      setEditingCourt(null);
+      setCourtName("");
+      setCourtAddress("");
+    }
+    setShowCourtModal(true);
+  }
+
+  function closeCourtModal() {
+    setShowCourtModal(false);
+    setEditingCourt(null);
+    setCourtName("");
+    setCourtAddress("");
+  }
+
+  async function addTimeSlot() {
+    if (!timeSlotName.trim() || !timeSlotDesc.trim()) return;
+    await supabase.from("time_slots").insert({ name: timeSlotName.trim(), description: timeSlotDesc.trim(), is_default: false });
+    setTimeSlotName("");
+    setTimeSlotDesc("");
+    setShowTimeSlotModal(false);
+    load();
+  }
+
+  async function updateTimeSlot() {
+    if (!editingTimeSlot || !timeSlotName.trim() || !timeSlotDesc.trim()) return;
+    await supabase.from("time_slots").update({ name: timeSlotName.trim(), description: timeSlotDesc.trim() }).eq("id", editingTimeSlot.id);
+    setTimeSlotName("");
+    setTimeSlotDesc("");
+    setEditingTimeSlot(null);
+    setShowTimeSlotModal(false);
+    load();
+  }
+
+  async function deleteTimeSlot(slotId: string) {
+    if (confirm("Are you sure you want to delete this time slot?")) {
+      await supabase.from("time_slots").delete().eq("id", slotId);
+      load();
+    }
+  }
+
+  async function setDefaultTimeSlot(slotId: string) {
+    // First, unset all defaults
+    await supabase.from("time_slots").update({ is_default: false }).neq("id", slotId);
+    // Then set the new default
+    await supabase.from("time_slots").update({ is_default: true }).eq("id", slotId);
+    setSettings({ ...settings, default_time_slot_id: slotId });
+    load();
+  }
+
+  function openTimeSlotModal(slot?: any) {
+    if (slot) {
+      setEditingTimeSlot(slot);
+      setTimeSlotName(slot.name);
+      setTimeSlotDesc(slot.description);
+    } else {
+      setEditingTimeSlot(null);
+      setTimeSlotName("");
+      setTimeSlotDesc("");
+    }
+    setShowTimeSlotModal(true);
+  }
+
+  function closeTimeSlotModal() {
+    setShowTimeSlotModal(false);
+    setEditingTimeSlot(null);
+    setTimeSlotName("");
+    setTimeSlotDesc("");
+  }
+
+  if (!settings) return <p>Loading...</p>;
 
   return (
-    <div className="max-w-2xl space-y-6">
-      <div className="flex items-center justify-between">
-        <h1 className="text-2xl font-bold text-stone-800">Manager Settings</h1>
-        {savedFlash && (
-          <span className="animate-pulse rounded-full bg-green-100 px-3 py-1 text-xs font-medium text-green-700">
-            ✓ {savedFlash}
-          </span>
-        )}
+    <div className="max-w-4xl space-y-8">
+      <h1 className="text-xl font-bold">Manager Settings</h1>
+
+      {/* Court Management */}
+      <div className="space-y-4">
+        <div className="flex items-center justify-between">
+          <h2 className="text-lg font-semibold">Court Locations</h2>
+          <button onClick={() => openCourtModal()} className="rounded-md bg-court-green px-3 py-1 text-sm text-white">
+            + Add Court
+          </button>
+        </div>
+        <div className="overflow-x-auto rounded-md border">
+          <table className="w-full text-sm">
+            <thead className="bg-stone-100 text-left">
+              <tr>
+                <th className="px-4 py-2 font-medium">Name</th>
+                <th className="px-4 py-2 font-medium">Address</th>
+                <th className="px-4 py-2 font-medium">Default</th>
+                <th className="px-4 py-2 font-medium">Actions</th>
+              </tr>
+            </thead>
+            <tbody>
+              {courts.map((c) => (
+                <tr key={c.id} className="border-t">
+                  <td className="px-4 py-2">{c.name}</td>
+                  <td className="px-4 py-2 text-stone-500">{c.address || "—"}</td>
+                  <td className="px-4 py-2">
+                    {settings.default_court_id === c.id ? (
+                      <span className="text-court-green font-medium">✓ Default</span>
+                    ) : (
+                      <button onClick={() => setDefaultCourt(c.id)} className="text-court-green underline">
+                        Set Default
+                      </button>
+                    )}
+                  </td>
+                  <td className="px-4 py-2">
+                    <div className="flex gap-2">
+                      <button onClick={() => openCourtModal(c)} className="text-blue-600 underline">
+                        Edit
+                      </button>
+                      <button onClick={() => deleteCourt(c.id)} className="text-red-600 underline">
+                        Delete
+                      </button>
+                    </div>
+                  </td>
+                </tr>
+              ))}
+              {courts.length === 0 && (
+                <tr><td colSpan={4} className="px-4 py-4 text-center text-stone-400">No courts added yet.</td></tr>
+              )}
+            </tbody>
+          </table>
+        </div>
       </div>
 
-      <SettingsCard
-        title="Courts"
-        description="These are the courts available for matches. Drag order with the arrows, pick which one is the default for new draft matches, rename or remove any of them."
-      >
-        {courts.length === 0 && <EmptyRow text="No courts yet — add your first one below." />}
-        {courts.map((c, i) => (
-          <ManagedRow
-            key={c.id}
-            value={c.name ?? ""}
-            isDefault={settings.default_court_id === c.id}
-            isFirst={i === 0}
-            isLast={i === courts.length - 1}
-            onMoveUp={() => moveCourt(c.id, -1)}
-            onMoveDown={() => moveCourt(c.id, 1)}
-            onRename={(v) => renameCourt(c.id, v)}
-            onSetDefault={() => setDefaultCourt(c.id)}
-            onDelete={() => deleteCourt(c.id, c.name)}
-          />
-        ))}
-        <AddRow
-          placeholder="New court name, e.g. Langford 3"
-          value={newCourtName}
-          onChange={setNewCourtName}
-          onAdd={addCourt}
-          buttonLabel="Add court"
-        />
-      </SettingsCard>
-
-      <SettingsCard
-        title="Match Times"
-        description="These are the time options managers can pick when scheduling a match. Set one as the club's default."
-      >
-        {timePresets.length === 0 && <EmptyRow text="No time options yet — add your first one below." />}
-        {timePresets.map((t, i) => (
-          <ManagedRow
-            key={t.id}
-            value={t.label ?? ""}
-            isDefault={settings.default_time_display === t.label}
-            isFirst={i === 0}
-            isLast={i === timePresets.length - 1}
-            onMoveUp={() => moveTimePreset(t.id, -1)}
-            onMoveDown={() => moveTimePreset(t.id, 1)}
-            onRename={(v) => renameTimePreset(t.id, v)}
-            onSetDefault={() => setDefaultTime(t.label!)}
-            onDelete={() => deleteTimePreset(t.id, t.label)}
-          />
-        ))}
-        <AddRow
-          placeholder="e.g. 6:00am warmup, 6:15am start play"
-          value={newTimeLabel}
-          onChange={setNewTimeLabel}
-          onAdd={addTimePreset}
-          buttonLabel="Add time"
-        />
-      </SettingsCard>
-    </div>
-  );
-}
-
-// ---------- Reusable pieces ----------
-
-function SettingsCard({ title, description, children }: { title: string; description: string; children: React.ReactNode }) {
-  return (
-    <div className="rounded-xl border border-stone-200 bg-white p-5 shadow-sm">
-      <h2 className="text-lg font-semibold text-stone-800">{title}</h2>
-      <p className="mt-0.5 mb-4 text-sm text-stone-500">{description}</p>
-      <div className="space-y-2">{children}</div>
-    </div>
-  );
-}
-
-function EmptyRow({ text }: { text: string }) {
-  return <p className="rounded-lg bg-stone-50 px-3 py-4 text-center text-sm text-stone-400">{text}</p>;
-}
-
-function ManagedRow({
-  value, isDefault, isFirst, isLast, onMoveUp, onMoveDown, onRename, onSetDefault, onDelete,
-}: {
-  value: string;
-  isDefault: boolean;
-  isFirst: boolean;
-  isLast: boolean;
-  onMoveUp: () => void;
-  onMoveDown: () => void;
-  onRename: (v: string) => void;
-  onSetDefault: () => void;
-  onDelete: () => void;
-}) {
-  return (
-    <div className={`flex items-center gap-2 rounded-lg border px-2 py-2 transition-colors ${isDefault ? "border-court-green bg-court-green/5" : "border-stone-200 bg-white"}`}>
-      <div className="flex flex-col">
-        <button
-          onClick={onMoveUp}
-          disabled={isFirst}
-          className="flex h-4 w-5 items-center justify-center rounded text-stone-400 hover:bg-stone-100 hover:text-stone-700 disabled:opacity-20"
-          aria-label="Move up"
-        >
-          ▲
-        </button>
-        <button
-          onClick={onMoveDown}
-          disabled={isLast}
-          className="flex h-4 w-5 items-center justify-center rounded text-stone-400 hover:bg-stone-100 hover:text-stone-700 disabled:opacity-20"
-          aria-label="Move down"
-        >
-          ▼
-        </button>
+      {/* Time Slot Management */}
+      <div className="space-y-4">
+        <div className="flex items-center justify-between">
+          <h2 className="text-lg font-semibold">Time Slots</h2>
+          <button onClick={() => openTimeSlotModal()} className="rounded-md bg-court-green px-3 py-1 text-sm text-white">
+            + Add Time Slot
+          </button>
+        </div>
+        <div className="overflow-x-auto rounded-md border">
+          <table className="w-full text-sm">
+            <thead className="bg-stone-100 text-left">
+              <tr>
+                <th className="px-4 py-2 font-medium">Name</th>
+                <th className="px-4 py-2 font-medium">Description</th>
+                <th className="px-4 py-2 font-medium">Default</th>
+                <th className="px-4 py-2 font-medium">Actions</th>
+              </tr>
+            </thead>
+            <tbody>
+              {timeSlots.map((ts) => (
+                <tr key={ts.id} className="border-t">
+                  <td className="px-4 py-2">{ts.name}</td>
+                  <td className="px-4 py-2 text-stone-500">{ts.description}</td>
+                  <td className="px-4 py-2">
+                    {ts.is_default ? (
+                      <span className="text-court-green font-medium">✓ Default</span>
+                    ) : (
+                      <button onClick={() => setDefaultTimeSlot(ts.id)} className="text-court-green underline">
+                        Set Default
+                      </button>
+                    )}
+                  </td>
+                  <td className="px-4 py-2">
+                    <div className="flex gap-2">
+                      <button onClick={() => openTimeSlotModal(ts)} className="text-blue-600 underline">
+                        Edit
+                      </button>
+                      <button onClick={() => deleteTimeSlot(ts.id)} className="text-red-600 underline">
+                        Delete
+                      </button>
+                    </div>
+                  </td>
+                </tr>
+              ))}
+              {timeSlots.length === 0 && (
+                <tr><td colSpan={4} className="px-4 py-4 text-center text-stone-400">No time slots added yet.</td></tr>
+              )}
+            </tbody>
+          </table>
+        </div>
       </div>
 
-      <input
-        className="min-w-0 flex-1 rounded-md border border-transparent bg-transparent px-2 py-1.5 text-sm text-stone-800 hover:border-stone-200 focus:border-stone-300 focus:bg-white focus:outline-none"
-        defaultValue={value}
-        onBlur={(e) => e.target.value.trim() && e.target.value !== value && onRename(e.target.value.trim())}
-      />
+      {/* Match Timeout */}
+      <div className="space-y-4">
+        <h2 className="text-lg font-semibold">Match Timeout</h2>
+        <label className="block text-sm font-medium">
+          Default timeout for proposed matches (hours)
+          <input
+            type="number"
+            className="mt-1 w-full rounded border border-stone-300 px-2 py-1"
+            value={settings.default_timeout_hours ?? 24}
+            onChange={(e) => setSettings({ ...settings, default_timeout_hours: parseInt(e.target.value) || 24 })}
+            min="1"
+          />
+        </label>
+      </div>
 
-      <label className="flex shrink-0 cursor-pointer items-center gap-1.5 whitespace-nowrap text-xs text-stone-500">
-        <input
-          type="radio"
-          checked={isDefault}
-          onChange={onSetDefault}
-          className="h-3.5 w-3.5 accent-court-green"
-        />
-        Default
-      </label>
+      {/* Nudge Frequency */}
+      <div className="space-y-4">
+        <h2 className="text-lg font-semibold">Nudge Frequency</h2>
+        <label className="block text-sm font-medium">
+          Send reminder nudge every X hours (after proposal)
+          <input
+            type="number"
+            className="mt-1 w-full rounded border border-stone-300 px-2 py-1"
+            value={settings.nudge_frequency_hours ?? 12}
+            onChange={(e) => setSettings({ ...settings, nudge_frequency_hours: parseInt(e.target.value) || 12 })}
+            min="1"
+          />
+        </label>
+      </div>
 
       <button
-        onClick={onDelete}
-        className="shrink-0 rounded-md px-2 py-1 text-xs text-stone-400 hover:bg-red-50 hover:text-red-600"
-        aria-label="Delete"
+        onClick={save}
+        disabled={saving}
+        className="rounded-md bg-court-green px-4 py-2 text-sm text-white disabled:opacity-50"
       >
-        Remove
+        {saving ? "Saving..." : "Save settings"}
       </button>
-    </div>
-  );
-}
+      {saved && <p className="text-sm text-green-700">Saved!</p>}
 
-function AddRow({
-  placeholder, value, onChange, onAdd, buttonLabel,
-}: {
-  placeholder: string;
-  value: string;
-  onChange: (v: string) => void;
-  onAdd: () => void;
-  buttonLabel: string;
-}) {
-  return (
-    <div className="flex gap-2 pt-1">
-      <input
-        className="flex-1 rounded-md border border-dashed border-stone-300 px-3 py-2 text-sm placeholder:text-stone-400 focus:border-solid focus:border-court-green focus:outline-none"
-        placeholder={placeholder}
-        value={value}
-        onChange={(e) => onChange(e.target.value)}
-        onKeyDown={(e) => e.key === "Enter" && onAdd()}
-      />
-      <button
-        onClick={onAdd}
-        className="shrink-0 rounded-md bg-court-green px-4 py-2 text-sm font-medium text-white hover:bg-court-green/90"
-      >
-        + {buttonLabel}
-      </button>
+      {/* Court Modal */}
+      {showCourtModal && (
+        <div className="fixed inset-0 flex items-center justify-center bg-black/50">
+          <div className="w-full max-w-md rounded-lg bg-white p-6 shadow-lg">
+            <h3 className="text-lg font-semibold">{editingCourt ? "Edit Court" : "Add Court"}</h3>
+            <div className="mt-4 space-y-4">
+              <div>
+                <label className="block text-sm font-medium">Court Name</label>
+                <input
+                  className="mt-1 w-full rounded border border-stone-300 px-2 py-1"
+                  value={courtName}
+                  onChange={(e) => setCourtName(e.target.value)}
+                  placeholder="e.g., Eagle Marsh 1"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium">Address (optional)</label>
+                <input
+                  className="mt-1 w-full rounded border border-stone-300 px-2 py-1"
+                  value={courtAddress}
+                  onChange={(e) => setCourtAddress(e.target.value)}
+                  placeholder="e.g., 123 Main St"
+                />
+              </div>
+            </div>
+            <div className="mt-6 flex justify-end gap-2">
+              <button onClick={closeCourtModal} className="rounded-md border border-stone-300 px-4 py-2 text-sm">
+                Cancel
+              </button>
+              <button
+                onClick={editingCourt ? updateCourt : addCourt}
+                className="rounded-md bg-court-green px-4 py-2 text-sm text-white"
+              >
+                {editingCourt ? "Update" : "Add"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Time Slot Modal */}
+      {showTimeSlotModal && (
+        <div className="fixed inset-0 flex items-center justify-center bg-black/50">
+          <div className="w-full max-w-md rounded-lg bg-white p-6 shadow-lg">
+            <h3 className="text-lg font-semibold">{editingTimeSlot ? "Edit Time Slot" : "Add Time Slot"}</h3>
+            <div className="mt-4 space-y-4">
+              <div>
+                <label className="block text-sm font-medium">Slot Name</label>
+                <input
+                  className="mt-1 w-full rounded border border-stone-300 px-2 py-1"
+                  value={timeSlotName}
+                  onChange={(e) => setTimeSlotName(e.target.value)}
+                  placeholder="e.g., morning"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium">Description</label>
+                <input
+                  className="mt-1 w-full rounded border border-stone-300 px-2 py-1"
+                  value={timeSlotDesc}
+                  onChange={(e) => setTimeSlotDesc(e.target.value)}
+                  placeholder="e.g., 8:00am warmup, 8:15am start play"
+                />
+              </div>
+            </div>
+            <div className="mt-6 flex justify-end gap-2">
+              <button onClick={closeTimeSlotModal} className="rounded-md border border-stone-300 px-4 py-2 text-sm">
+                Cancel
+              </button>
+              <button
+                onClick={editingTimeSlot ? updateTimeSlot : addTimeSlot}
+                className="rounded-md bg-court-green px-4 py-2 text-sm text-white"
+              >
+                {editingTimeSlot ? "Update" : "Add"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
