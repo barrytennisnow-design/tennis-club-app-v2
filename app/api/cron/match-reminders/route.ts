@@ -25,6 +25,10 @@ export async function GET(request: Request) {
   const supabaseAdmin = createAdminClient();
   const now = new Date();
 
+  // Get nudge frequency from club_settings
+  const { data: settings } = await supabaseAdmin.from("club_settings").select("nudge_frequency_hours").single();
+  const nudgeFrequency = settings?.nudge_frequency_hours ?? 12;
+
   const { data: proposedMatches } = await supabaseAdmin
     .from("matches")
     .select("*, court:courts(name), match_players(id, response_status, players(first_name, email))")
@@ -59,8 +63,13 @@ export async function GET(request: Request) {
       continue;
     }
 
-    if (hoursElapsed >= deadline / 2 && (match.nudge_count ?? 0) === 0) {
-      // Halfway-point nudge to anyone who hasn't responded yet.
+    // Send nudges at regular intervals based on nudge_frequency_hours
+    // Calculate how many nudges should have been sent by now
+    const expectedNudges = Math.floor(hoursElapsed / nudgeFrequency);
+    const currentNudges = match.nudge_count ?? 0;
+
+    if (expectedNudges > currentNudges) {
+      // Send nudge to anyone who hasn't responded yet
       const pending = match.match_players.filter((mp: any) => mp.response_status === "proposed");
       if (pending.length > 0) {
         for (const mp of pending) {
@@ -75,7 +84,7 @@ export async function GET(request: Request) {
         }
         await supabaseAdmin
           .from("matches")
-          .update({ nudge_count: (match.nudge_count ?? 0) + 1 })
+          .update({ nudge_count: currentNudges + 1 })
           .eq("id", match.id);
         nudged++;
       }

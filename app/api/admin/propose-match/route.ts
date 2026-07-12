@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { createClient, createAdminClient } from "@/lib/supabaseServer";
 import { sendEmail, matchProposedEmail } from "@/lib/email";
+import { buildMatchIcs } from "@/lib/ics";
 
 export async function POST(request: Request) {
   const { match_id } = await request.json();
@@ -34,6 +35,20 @@ export async function POST(request: Request) {
   if (updateError) return NextResponse.json({ error: updateError.message }, { status: 500 });
 
   const siteUrl = process.env.NEXT_PUBLIC_SITE_URL ?? "";
+  
+  // Generate ICS file for the match
+  const playerNames = match.match_players
+    .filter((mp: any) => mp.players)
+    .map((mp: any) => `${mp.players.first_name} ${mp.players.last_name}`);
+  const ics = buildMatchIcs({
+    matchId: match_id,
+    matchDate: match.match_date,
+    timeSlot: match.time_slot,
+    courtName: match.court?.name ?? "Court TBD",
+    playerNames,
+  });
+  const icsBase64 = Buffer.from(ics).toString("base64");
+  
   for (const mp of match.match_players) {
     if (!mp.players) continue;
     const teammates = match.match_players
@@ -49,7 +64,13 @@ export async function POST(request: Request) {
       acceptUrl: `${siteUrl}/matches`,
     });
 
-    await sendEmail({ supabaseAdmin: admin, to: mp.players.email, subject, html });
+    await sendEmail({
+      supabaseAdmin: admin,
+      to: mp.players.email,
+      subject,
+      html,
+      attachments: [{ filename: "match.ics", content: icsBase64 }],
+    });
   }
 
   return NextResponse.json({ ok: true });

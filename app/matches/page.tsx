@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { createClient } from "@/lib/supabaseClient";
 import { formatShortDate } from "@/lib/formatDate";
 import { formatPhone } from "@/lib/formatPhone";
+import { buildMatchIcs } from "@/lib/ics";
 
 function formatLongDate(dateStr: string) {
   const d = new Date(dateStr + "T00:00:00");
@@ -82,6 +83,28 @@ export default function MyMatchesPage() {
     load();
   }
 
+  function downloadIcs(match: any, roster: any[]) {
+    const playerNames = roster
+      .filter((r: any) => r.players)
+      .map((r: any) => `${r.players.first_name} ${r.players.last_name}`);
+    const ics = buildMatchIcs({
+      matchId: match.id,
+      matchDate: match.match_date,
+      timeSlot: match.time_slot,
+      courtName: match.court?.name ?? "Court TBD",
+      playerNames,
+    });
+    const blob = new Blob([ics], { type: "text/calendar" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `match-${match.match_number}.ics`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  }
+
   if (loading) return <p>Loading...</p>;
   if (!player) return <p>Please <a href="/login" className="underline">log in</a>.</p>;
 
@@ -147,10 +170,18 @@ export default function MyMatchesPage() {
             )}
 
             {mp.matches.status === "confirmed" && (
-              <p className="mt-3 text-sm text-stone-500">
-                If you can not make it to a confirmed match please contact the other players in the
-                match to cancel the match or arrange a sub player.
-              </p>
+              <div className="mt-3 space-y-3">
+                <button
+                  onClick={() => downloadIcs(mp.matches, roster)}
+                  className="rounded-md bg-court-green px-3 py-1 text-sm text-white"
+                >
+                  Download Calendar Invite (.ics)
+                </button>
+                <p className="text-sm text-stone-500">
+                  If you can not make it to a confirmed match please contact the other players in the
+                  match to cancel the match or arrange a sub player.
+                </p>
+              </div>
             )}
           </div>
         );
