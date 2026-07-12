@@ -70,6 +70,9 @@ export default function MatchMatrixPage() {
   const [swapMode, setSwapMode] = useState(false);
   const [swapSlots, setSwapSlots] = useState<{ playerId: string; matchId: string | null; date: string; label: string }[]>([]);
   const [swapBusy, setSwapBusy] = useState(false);
+  const [editingMatch, setEditingMatch] = useState<{ matchId: string; field: 'court' | 'time' } | null>(null);
+  const [tempCourt, setTempCourt] = useState<string>("");
+  const [tempTime, setTempTime] = useState<string>("");
   const days = daysBetween(viewStart, viewEnd);
 
   async function load() {
@@ -78,7 +81,7 @@ export default function MatchMatrixPage() {
       .select("id, first_name, last_name, ranking, days_per_week, days_in_a_row, zip, phone, email, notes, status")
       .eq("status", "active");
     const sorted = (playerRows ?? []).slice().sort((a, b) => {
-      const rankDiff = (a.ranking ?? 0) - (b.ranking ?? 0);
+      const rankDiff = (b.ranking ?? 0) - (a.ranking ?? 0);
       if (rankDiff !== 0) return rankDiff;
       return a.first_name.localeCompare(b.first_name);
     });
@@ -231,6 +234,49 @@ export default function MatchMatrixPage() {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ match_id: selectedMatch.id, time_display: finalValue }),
     });
+    load();
+  }
+
+  async function handleInlineCourtChange(matchId: string, courtId: string) {
+    await fetch("/api/admin/assign-court", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ match_id: matchId, court_id: courtId || null }),
+    });
+    load();
+  }
+
+  async function handleInlineTimeChange(matchId: string, timeValue: string) {
+    const finalValue = timeValue === "__default__" ? "" : timeValue === "__custom__" ? tempTime : timeValue;
+    await fetch("/api/admin/set-match-time", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ match_id: matchId, time_display: finalValue }),
+    });
+    load();
+  }
+
+  async function handleInlinePropose(matchId: string) {
+    if (!confirm("Email all 4 players asking them to accept or decline?")) return;
+    const res = await fetch("/api/admin/propose-match", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ match_id: matchId }),
+    });
+    const json = await res.json();
+    if (!json.ok) alert(`Error: ${json.error}`);
+    load();
+  }
+
+  async function handleInlineCancel(matchId: string) {
+    if (!confirm("Cancel this match?")) return;
+    const res = await fetch("/api/admin/cancel-match", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ match_id: matchId }),
+    });
+    const json = await res.json();
+    if (!json.ok) alert(`Error: ${json.error}`);
     load();
   }
 
@@ -408,7 +454,7 @@ export default function MatchMatrixPage() {
                         onClick={() => handleCellClick(p.id, d, m, isAvailUnassigned)}
                         className={`block w-full whitespace-nowrap rounded px-1 py-0 leading-tight ${color} ${isOverloaded ? "ring-2 ring-orange-400" : ""} ${isSelected ? "outline outline-2 outline-purple-500" : ""} ${swapSlots.some((s) => s.playerId === p.id && s.date === d) ? "outline outline-2 outline-purple-600" : ""}`}
                       >
-                        {m ? `${p.first_name} M${m.match_number}` : isAvailUnassigned ? `${p.first_name} Unas.` : ""}
+                        {m ? `${p.first_name} M${m.match_number} ${m.status.toUpperCase()}` : isAvailUnassigned ? `${p.first_name} Unas.` : ""}
                       </button>
                     </td>
                   );
@@ -421,6 +467,80 @@ export default function MatchMatrixPage() {
                 <td className="whitespace-nowrap px-1.5 py-0 italic text-stone-500">{p.notes ?? ""}</td>
               </tr>
             ))}
+            {/* Match details row */}
+            <tr className="border-t bg-stone-50">
+              <td colSpan={3} className="px-2 py-1 font-medium text-stone-600">Match Details</td>
+              {days.map((d) => {
+                // Get unique matches for this day
+                const dayMatches = matches.filter((m) => m.match_date === d);
+                const uniqueMatches = Array.from(new Map(dayMatches.map((m) => [m.id, m])).values());
+                return (
+                  <td key={d} className="p-1 align-top">
+                    <div className="space-y-1">
+                      {uniqueMatches.map((m) => {
+                        const color = MATCH_PALETTE[m.match_number % MATCH_PALETTE.length];
+                        return (
+                          <div key={m.id} className={`rounded p-1 ${color}`}>
+                            <div className="text-xs font-semibold">M{m.match_number}</div>
+                            {m.status === "draft" ? (
+                              <select
+                                className="w-full rounded border border-stone-300 px-1 py-0.5 text-xs"
+                                defaultValue={m.court?.id ?? ""}
+                                onChange={(e) => handleInlineCourtChange(m.id, e.target.value)}
+                              >
+                                <option value="">Court TBD</option>
+                                {courts.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
+                              </select>
+                            ) : (
+                              <div className="text-xs">{m.court?.name ?? "Court TBD"}</div>
+                            )}
+                            {m.status === "draft" ? (
+                              <select
+                                className="w-full rounded border border-stone-300 px-1 py-0.5 text-xs mt-1"
+                                defaultValue={
+                                  !m.time_display
+                                    ? "__default__"
+                                    : TIME_PRESETS.includes(m.time_display)
+                                    ? m.time_display
+                                    : "__custom__"
+                                }
+                                onChange={(e) => {
+                                  if (e.target.value !== "__custom__") handleInlineTimeChange(m.id, e.target.value);
+                                }}
+                              >
+                                <option value="__default__">Default ({defaultTimeDisplay})</option>
+                                {TIME_PRESETS.map((t) => <option key={t} value={t}>{t}</option>)}
+                                <option value="__custom__">Custom...</option>
+                              </select>
+                            ) : (
+                              <div className="text-xs">{m.time_display || defaultTimeDisplay}</div>
+                            )}
+                            {m.status === "draft" ? (
+                              <button
+                                onClick={() => handleInlinePropose(m.id)}
+                                className="mt-1 w-full rounded bg-court-green px-2 py-0.5 text-xs text-white"
+                              >
+                                PROPOSE
+                              </button>
+                            ) : (
+                              <button
+                                onClick={() => handleInlineCancel(m.id)}
+                                className="mt-1 w-full rounded border border-red-300 px-2 py-0.5 text-xs text-red-700"
+                              >
+                                CANCEL
+                              </button>
+                            )}
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </td>
+                );
+              })}
+              <td colSpan={5} className="px-2 py-1 text-stone-400 text-xs">
+                Edit court/time for draft matches, or cancel proposed/confirmed matches
+              </td>
+            </tr>
           </tbody>
         </table>
       </div>
