@@ -447,6 +447,9 @@ export default function MatchMatrixPage() {
                     : isAvailUnassigned
                     ? UNASSIGNED_COLOR
                     : "";
+                  // Get player's response status for this match
+                  const playerMatch = m ? m.match_players?.find((mp: any) => mp.player_id === p.id) : null;
+                  const responseStatus = playerMatch?.response_status;
                   return (
                     <td key={d} className="p-0 text-center">
                       <button
@@ -454,7 +457,7 @@ export default function MatchMatrixPage() {
                         onClick={() => handleCellClick(p.id, d, m, isAvailUnassigned)}
                         className={`block w-full whitespace-nowrap rounded px-1 py-0 leading-tight ${color} ${isOverloaded ? "ring-2 ring-orange-400" : ""} ${isSelected ? "outline outline-2 outline-purple-500" : ""} ${swapSlots.some((s) => s.playerId === p.id && s.date === d) ? "outline outline-2 outline-purple-600" : ""}`}
                       >
-                        {m ? `${p.first_name} M${m.match_number} ${m.status.toUpperCase()}` : isAvailUnassigned ? `${p.first_name} Unas.` : ""}
+                        {m ? `${p.first_name} M${m.match_number} ${responseStatus ? responseStatus.toUpperCase() : m.status.toUpperCase()}` : isAvailUnassigned ? `${p.first_name} Unas.` : ""}
                       </button>
                     </td>
                   );

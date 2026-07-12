@@ -12,7 +12,8 @@ export default function AdminMatchesPage() {
     const { data } = await supabase
       .from("matches")
       .select("*, court:courts(id, name), match_players(id, response_status, decline_reason, player_id, players(id, first_name, last_name))")
-      .order("match_date", { ascending: true });
+      .not("status", "eq", "draft")
+      .order("match_date", { ascending: false });
     setMatches(data ?? []);
   }
 
