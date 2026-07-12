@@ -10,10 +10,18 @@ export default function SettingsPage() {
   const [settings, setSettings] = useState<any>(null);
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
-  const [newCourtName, setNewCourtName] = useState("");
-  const [newCourtAddress, setNewCourtAddress] = useState("");
-  const [newTimeSlotName, setNewTimeSlotName] = useState("");
-  const [newTimeSlotDesc, setNewTimeSlotDesc] = useState("");
+  
+  // Modal states
+  const [showCourtModal, setShowCourtModal] = useState(false);
+  const [showTimeSlotModal, setShowTimeSlotModal] = useState(false);
+  const [editingCourt, setEditingCourt] = useState<any>(null);
+  const [editingTimeSlot, setEditingTimeSlot] = useState<any>(null);
+  
+  // Form states
+  const [courtName, setCourtName] = useState("");
+  const [courtAddress, setCourtAddress] = useState("");
+  const [timeSlotName, setTimeSlotName] = useState("");
+  const [timeSlotDesc, setTimeSlotDesc] = useState("");
 
   async function load() {
     const { data: courtRows } = await supabase.from("courts").select("*").order("name");
@@ -45,33 +53,80 @@ export default function SettingsPage() {
   }
 
   async function addCourt() {
-    if (!newCourtName.trim()) return;
-    await supabase.from("courts").insert({ name: newCourtName.trim(), address: newCourtAddress.trim() || null });
-    setNewCourtName("");
-    setNewCourtAddress("");
+    if (!courtName.trim()) return;
+    await supabase.from("courts").insert({ name: courtName.trim(), address: courtAddress.trim() || null });
+    setCourtName("");
+    setCourtAddress("");
+    setShowCourtModal(false);
+    load();
+  }
+
+  async function updateCourt() {
+    if (!editingCourt || !courtName.trim()) return;
+    await supabase.from("courts").update({ name: courtName.trim(), address: courtAddress.trim() || null }).eq("id", editingCourt.id);
+    setCourtName("");
+    setCourtAddress("");
+    setEditingCourt(null);
+    setShowCourtModal(false);
     load();
   }
 
   async function deleteCourt(courtId: string) {
-    await supabase.from("courts").delete().eq("id", courtId);
-    load();
+    if (confirm("Are you sure you want to delete this court?")) {
+      await supabase.from("courts").delete().eq("id", courtId);
+      load();
+    }
   }
 
   async function setDefaultCourt(courtId: string) {
     setSettings({ ...settings, default_court_id: courtId });
+    await save();
+  }
+
+  function openCourtModal(court?: any) {
+    if (court) {
+      setEditingCourt(court);
+      setCourtName(court.name);
+      setCourtAddress(court.address || "");
+    } else {
+      setEditingCourt(null);
+      setCourtName("");
+      setCourtAddress("");
+    }
+    setShowCourtModal(true);
+  }
+
+  function closeCourtModal() {
+    setShowCourtModal(false);
+    setEditingCourt(null);
+    setCourtName("");
+    setCourtAddress("");
   }
 
   async function addTimeSlot() {
-    if (!newTimeSlotName.trim() || !newTimeSlotDesc.trim()) return;
-    await supabase.from("time_slots").insert({ name: newTimeSlotName.trim(), description: newTimeSlotDesc.trim(), is_default: false });
-    setNewTimeSlotName("");
-    setNewTimeSlotDesc("");
+    if (!timeSlotName.trim() || !timeSlotDesc.trim()) return;
+    await supabase.from("time_slots").insert({ name: timeSlotName.trim(), description: timeSlotDesc.trim(), is_default: false });
+    setTimeSlotName("");
+    setTimeSlotDesc("");
+    setShowTimeSlotModal(false);
+    load();
+  }
+
+  async function updateTimeSlot() {
+    if (!editingTimeSlot || !timeSlotName.trim() || !timeSlotDesc.trim()) return;
+    await supabase.from("time_slots").update({ name: timeSlotName.trim(), description: timeSlotDesc.trim() }).eq("id", editingTimeSlot.id);
+    setTimeSlotName("");
+    setTimeSlotDesc("");
+    setEditingTimeSlot(null);
+    setShowTimeSlotModal(false);
     load();
   }
 
   async function deleteTimeSlot(slotId: string) {
-    await supabase.from("time_slots").delete().eq("id", slotId);
-    load();
+    if (confirm("Are you sure you want to delete this time slot?")) {
+      await supabase.from("time_slots").delete().eq("id", slotId);
+      load();
+    }
   }
 
   async function setDefaultTimeSlot(slotId: string) {
@@ -83,95 +138,133 @@ export default function SettingsPage() {
     load();
   }
 
+  function openTimeSlotModal(slot?: any) {
+    if (slot) {
+      setEditingTimeSlot(slot);
+      setTimeSlotName(slot.name);
+      setTimeSlotDesc(slot.description);
+    } else {
+      setEditingTimeSlot(null);
+      setTimeSlotName("");
+      setTimeSlotDesc("");
+    }
+    setShowTimeSlotModal(true);
+  }
+
+  function closeTimeSlotModal() {
+    setShowTimeSlotModal(false);
+    setEditingTimeSlot(null);
+    setTimeSlotName("");
+    setTimeSlotDesc("");
+  }
+
   if (!settings) return <p>Loading...</p>;
 
   return (
-    <div className="max-w-2xl space-y-8">
+    <div className="max-w-4xl space-y-8">
       <h1 className="text-xl font-bold">Manager Settings</h1>
 
       {/* Court Management */}
       <div className="space-y-4">
-        <h2 className="text-lg font-semibold">Court Locations</h2>
-        <div className="space-y-2">
-          {courts.map((c) => (
-            <div key={c.id} className="flex items-center justify-between rounded border p-3">
-              <div>
-                <p className="font-medium">{c.name}</p>
-                {c.address && <p className="text-sm text-stone-500">{c.address}</p>}
-                {settings.default_court_id === c.id && <span className="text-xs text-court-green">Default</span>}
-              </div>
-              <div className="flex gap-2">
-                {settings.default_court_id !== c.id && (
-                  <button onClick={() => setDefaultCourt(c.id)} className="text-sm text-court-green underline">
-                    Set Default
-                  </button>
-                )}
-                <button onClick={() => deleteCourt(c.id)} className="text-sm text-red-600 underline">
-                  Delete
-                </button>
-              </div>
-            </div>
-          ))}
-        </div>
-        <div className="flex gap-2">
-          <input
-            className="flex-1 rounded border border-stone-300 px-2 py-1"
-            placeholder="Court name"
-            value={newCourtName}
-            onChange={(e) => setNewCourtName(e.target.value)}
-          />
-          <input
-            className="flex-1 rounded border border-stone-300 px-2 py-1"
-            placeholder="Address (optional)"
-            value={newCourtAddress}
-            onChange={(e) => setNewCourtAddress(e.target.value)}
-          />
-          <button onClick={addCourt} className="rounded-md bg-court-green px-3 py-1 text-sm text-white">
-            Add
+        <div className="flex items-center justify-between">
+          <h2 className="text-lg font-semibold">Court Locations</h2>
+          <button onClick={() => openCourtModal()} className="rounded-md bg-court-green px-3 py-1 text-sm text-white">
+            + Add Court
           </button>
+        </div>
+        <div className="overflow-x-auto rounded-md border">
+          <table className="w-full text-sm">
+            <thead className="bg-stone-100 text-left">
+              <tr>
+                <th className="px-4 py-2 font-medium">Name</th>
+                <th className="px-4 py-2 font-medium">Address</th>
+                <th className="px-4 py-2 font-medium">Default</th>
+                <th className="px-4 py-2 font-medium">Actions</th>
+              </tr>
+            </thead>
+            <tbody>
+              {courts.map((c) => (
+                <tr key={c.id} className="border-t">
+                  <td className="px-4 py-2">{c.name}</td>
+                  <td className="px-4 py-2 text-stone-500">{c.address || "—"}</td>
+                  <td className="px-4 py-2">
+                    {settings.default_court_id === c.id ? (
+                      <span className="text-court-green font-medium">✓ Default</span>
+                    ) : (
+                      <button onClick={() => setDefaultCourt(c.id)} className="text-court-green underline">
+                        Set Default
+                      </button>
+                    )}
+                  </td>
+                  <td className="px-4 py-2">
+                    <div className="flex gap-2">
+                      <button onClick={() => openCourtModal(c)} className="text-blue-600 underline">
+                        Edit
+                      </button>
+                      <button onClick={() => deleteCourt(c.id)} className="text-red-600 underline">
+                        Delete
+                      </button>
+                    </div>
+                  </td>
+                </tr>
+              ))}
+              {courts.length === 0 && (
+                <tr><td colSpan={4} className="px-4 py-4 text-center text-stone-400">No courts added yet.</td></tr>
+              )}
+            </tbody>
+          </table>
         </div>
       </div>
 
       {/* Time Slot Management */}
       <div className="space-y-4">
-        <h2 className="text-lg font-semibold">Time Slots</h2>
-        <div className="space-y-2">
-          {timeSlots.map((ts) => (
-            <div key={ts.id} className="flex items-center justify-between rounded border p-3">
-              <div>
-                <p className="font-medium">{ts.name}</p>
-                <p className="text-sm text-stone-500">{ts.description}</p>
-                {ts.is_default && <span className="text-xs text-court-green">Default</span>}
-              </div>
-              <div className="flex gap-2">
-                {!ts.is_default && (
-                  <button onClick={() => setDefaultTimeSlot(ts.id)} className="text-sm text-court-green underline">
-                    Set Default
-                  </button>
-                )}
-                <button onClick={() => deleteTimeSlot(ts.id)} className="text-sm text-red-600 underline">
-                  Delete
-                </button>
-              </div>
-            </div>
-          ))}
-        </div>
-        <div className="flex gap-2">
-          <input
-            className="flex-1 rounded border border-stone-300 px-2 py-1"
-            placeholder="Slot name (e.g., morning)"
-            value={newTimeSlotName}
-            onChange={(e) => setNewTimeSlotName(e.target.value)}
-          />
-          <input
-            className="flex-1 rounded border border-stone-300 px-2 py-1"
-            placeholder="Description (e.g., 8:00am warmup, 8:15am start play)"
-            value={newTimeSlotDesc}
-            onChange={(e) => setNewTimeSlotDesc(e.target.value)}
-          />
-          <button onClick={addTimeSlot} className="rounded-md bg-court-green px-3 py-1 text-sm text-white">
-            Add
+        <div className="flex items-center justify-between">
+          <h2 className="text-lg font-semibold">Time Slots</h2>
+          <button onClick={() => openTimeSlotModal()} className="rounded-md bg-court-green px-3 py-1 text-sm text-white">
+            + Add Time Slot
           </button>
+        </div>
+        <div className="overflow-x-auto rounded-md border">
+          <table className="w-full text-sm">
+            <thead className="bg-stone-100 text-left">
+              <tr>
+                <th className="px-4 py-2 font-medium">Name</th>
+                <th className="px-4 py-2 font-medium">Description</th>
+                <th className="px-4 py-2 font-medium">Default</th>
+                <th className="px-4 py-2 font-medium">Actions</th>
+              </tr>
+            </thead>
+            <tbody>
+              {timeSlots.map((ts) => (
+                <tr key={ts.id} className="border-t">
+                  <td className="px-4 py-2">{ts.name}</td>
+                  <td className="px-4 py-2 text-stone-500">{ts.description}</td>
+                  <td className="px-4 py-2">
+                    {ts.is_default ? (
+                      <span className="text-court-green font-medium">✓ Default</span>
+                    ) : (
+                      <button onClick={() => setDefaultTimeSlot(ts.id)} className="text-court-green underline">
+                        Set Default
+                      </button>
+                    )}
+                  </td>
+                  <td className="px-4 py-2">
+                    <div className="flex gap-2">
+                      <button onClick={() => openTimeSlotModal(ts)} className="text-blue-600 underline">
+                        Edit
+                      </button>
+                      <button onClick={() => deleteTimeSlot(ts.id)} className="text-red-600 underline">
+                        Delete
+                      </button>
+                    </div>
+                  </td>
+                </tr>
+              ))}
+              {timeSlots.length === 0 && (
+                <tr><td colSpan={4} className="px-4 py-4 text-center text-stone-400">No time slots added yet.</td></tr>
+              )}
+            </tbody>
+          </table>
         </div>
       </div>
 
@@ -213,6 +306,86 @@ export default function SettingsPage() {
         {saving ? "Saving..." : "Save settings"}
       </button>
       {saved && <p className="text-sm text-green-700">Saved!</p>}
+
+      {/* Court Modal */}
+      {showCourtModal && (
+        <div className="fixed inset-0 flex items-center justify-center bg-black/50">
+          <div className="w-full max-w-md rounded-lg bg-white p-6 shadow-lg">
+            <h3 className="text-lg font-semibold">{editingCourt ? "Edit Court" : "Add Court"}</h3>
+            <div className="mt-4 space-y-4">
+              <div>
+                <label className="block text-sm font-medium">Court Name</label>
+                <input
+                  className="mt-1 w-full rounded border border-stone-300 px-2 py-1"
+                  value={courtName}
+                  onChange={(e) => setCourtName(e.target.value)}
+                  placeholder="e.g., Eagle Marsh 1"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium">Address (optional)</label>
+                <input
+                  className="mt-1 w-full rounded border border-stone-300 px-2 py-1"
+                  value={courtAddress}
+                  onChange={(e) => setCourtAddress(e.target.value)}
+                  placeholder="e.g., 123 Main St"
+                />
+              </div>
+            </div>
+            <div className="mt-6 flex justify-end gap-2">
+              <button onClick={closeCourtModal} className="rounded-md border border-stone-300 px-4 py-2 text-sm">
+                Cancel
+              </button>
+              <button
+                onClick={editingCourt ? updateCourt : addCourt}
+                className="rounded-md bg-court-green px-4 py-2 text-sm text-white"
+              >
+                {editingCourt ? "Update" : "Add"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Time Slot Modal */}
+      {showTimeSlotModal && (
+        <div className="fixed inset-0 flex items-center justify-center bg-black/50">
+          <div className="w-full max-w-md rounded-lg bg-white p-6 shadow-lg">
+            <h3 className="text-lg font-semibold">{editingTimeSlot ? "Edit Time Slot" : "Add Time Slot"}</h3>
+            <div className="mt-4 space-y-4">
+              <div>
+                <label className="block text-sm font-medium">Slot Name</label>
+                <input
+                  className="mt-1 w-full rounded border border-stone-300 px-2 py-1"
+                  value={timeSlotName}
+                  onChange={(e) => setTimeSlotName(e.target.value)}
+                  placeholder="e.g., morning"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium">Description</label>
+                <input
+                  className="mt-1 w-full rounded border border-stone-300 px-2 py-1"
+                  value={timeSlotDesc}
+                  onChange={(e) => setTimeSlotDesc(e.target.value)}
+                  placeholder="e.g., 8:00am warmup, 8:15am start play"
+                />
+              </div>
+            </div>
+            <div className="mt-6 flex justify-end gap-2">
+              <button onClick={closeTimeSlotModal} className="rounded-md border border-stone-300 px-4 py-2 text-sm">
+                Cancel
+              </button>
+              <button
+                onClick={editingTimeSlot ? updateTimeSlot : addTimeSlot}
+                className="rounded-md bg-court-green px-4 py-2 text-sm text-white"
+              >
+                {editingTimeSlot ? "Update" : "Add"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
