@@ -28,9 +28,22 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Assign a court before proposing this match" }, { status: 400 });
   }
 
+  // Pull the manager's current default timeout so it applies fresh at
+  // the moment of proposing -- mirrors the old sheet's "hour for auto
+  // cancel" column, which the manager set going into each proposal
+  // round. Nudge count always restarts at 0 for a newly-proposed
+  // match; both stay manager-editable afterward on the Matches page.
+  const { data: settings } = await admin.from("club_settings").select("default_timeout_hours").single();
+  const autoCancelHours = settings?.default_timeout_hours ?? 24;
+
   const { error: updateError } = await admin
     .from("matches")
-    .update({ status: "proposed", proposed_at: new Date().toISOString() })
+    .update({
+      status: "proposed",
+      proposed_at: new Date().toISOString(),
+      auto_cancel_hours: autoCancelHours,
+      nudge_count: 0,
+    })
     .eq("id", match_id);
   if (updateError) return NextResponse.json({ error: updateError.message }, { status: 500 });
 

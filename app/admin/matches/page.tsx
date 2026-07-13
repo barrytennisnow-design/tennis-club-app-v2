@@ -22,6 +22,11 @@ export default function AdminMatchesPage() {
     load();
   }
 
+  async function updateNudgeCount(matchId: string, count: number) {
+    await supabase.from("matches").update({ nudge_count: count }).eq("id", matchId);
+    load();
+  }
+
   useEffect(() => {
     load();
   }, []);
@@ -57,10 +62,11 @@ export default function AdminMatchesPage() {
               <th className="p-2">Player 3</th>
               <th className="p-2">Player 4</th>
               <th className="p-2">Status</th>
-              <th className="p-2">Timeout (hrs)</th>
               <th className="p-2">Proposed</th>
               <th className="p-2">Confirmed</th>
               <th className="p-2">Cancelled</th>
+              <th className="p-2">Hours for Auto Cancel</th>
+              <th className="p-2">Nudge Count</th>
             </tr>
           </thead>
           <tbody>
@@ -96,6 +102,9 @@ export default function AdminMatchesPage() {
                       {m.status.toUpperCase()}
                     </span>
                   </td>
+                  <td className="p-2">{m.proposed_at ? new Date(m.proposed_at).toLocaleString() : "—"}</td>
+                  <td className="p-2">{m.confirmed_at ? new Date(m.confirmed_at).toLocaleString() : "—"}</td>
+                  <td className="p-2">{m.cancelled_at ? new Date(m.cancelled_at).toLocaleString() : "—"}</td>
                   <td className="p-2">
                     {m.status === "proposed" ? (
                       <input
@@ -109,14 +118,24 @@ export default function AdminMatchesPage() {
                       <span className="text-stone-400">{m.auto_cancel_hours ?? 24}</span>
                     )}
                   </td>
-                  <td className="p-2">{m.proposed_at ? new Date(m.proposed_at).toLocaleString() : "—"}</td>
-                  <td className="p-2">{m.confirmed_at ? new Date(m.confirmed_at).toLocaleString() : "—"}</td>
-                  <td className="p-2">{m.cancelled_at ? new Date(m.cancelled_at).toLocaleString() : "—"}</td>
+                  <td className="p-2">
+                    {m.status === "proposed" ? (
+                      <input
+                        type="number"
+                        className="w-16 rounded border border-stone-300 px-1 py-0.5 text-xs"
+                        value={m.nudge_count ?? 0}
+                        onChange={(e) => updateNudgeCount(m.id, parseInt(e.target.value) || 0)}
+                        min="0"
+                      />
+                    ) : (
+                      <span className="text-stone-400">{m.nudge_count ?? 0}</span>
+                    )}
+                  </td>
                 </tr>
               );
             })}
             {matches.length === 0 && (
-              <tr><td colSpan={13} className="p-4 text-center text-stone-400">No matches yet.</td></tr>
+              <tr><td colSpan={14} className="p-4 text-center text-stone-400">No matches yet.</td></tr>
             )}
           </tbody>
         </table>
