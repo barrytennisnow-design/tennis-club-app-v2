@@ -5,14 +5,6 @@ import { createClient } from "@/lib/supabaseClient";
 import { formatPhone } from "@/lib/formatPhone";
 import { formatShortDateWithWeekday } from "@/lib/formatDate";
 
-const TIME_PRESETS = [
-  "7:00am warmup, 7:15am start play",
-  "8:00am warmup, 8:15am start play",
-  "9:00am warmup, 9:15am start play",
-  "4:00pm warmup, 4:15pm start play",
-  "5:00pm warmup, 5:15pm start play",
-];
-
 function isoDaysFromNow(n: number) {
   const d = new Date();
   d.setDate(d.getDate() + n);
@@ -54,6 +46,7 @@ export default function MatchMatrixPage() {
   const [players, setPlayers] = useState<any[]>([]);
   const [matches, setMatches] = useState<any[]>([]);
   const [courts, setCourts] = useState<any[]>([]);
+  const [timeSlots, setTimeSlots] = useState<any[]>([]);
   const [defaultTimeDisplay, setDefaultTimeDisplay] = useState("");
   const [timeChoice, setTimeChoice] = useState<string>("");
   const [customTime, setCustomTime] = useState<string>("");
@@ -100,11 +93,29 @@ export default function MatchMatrixPage() {
     }
     setMatches(matchRows ?? []);
 
-    const { data: courtRows } = await supabase.from("courts").select("*").order("name");
+    // Only ACTIVE courts are offered as assignment options -- courts
+    // retired from Manager Settings drop out of the picker but stay
+    // attached to whatever historical matches already reference them.
+    const { data: courtRows } = await supabase
+      .from("courts")
+      .select("*")
+      .eq("is_active", true)
+      .order("sort_order")
+      .order("name");
     setCourts(courtRows ?? []);
 
-    const { data: settingsRow } = await supabase.from("club_settings").select("default_time_display").single();
-    if (settingsRow) setDefaultTimeDisplay(settingsRow.default_time_display);
+    // Same for time slots -- managed on the Manager Settings page,
+    // and the one flagged is_default drives the "Default (...)"
+    // option and the fallback shown when a match has no override.
+    const { data: timeSlotRows } = await supabase
+      .from("time_slots")
+      .select("*")
+      .eq("is_active", true)
+      .order("sort_order")
+      .order("name");
+    setTimeSlots(timeSlotRows ?? []);
+    const defaultSlot = (timeSlotRows ?? []).find((t: any) => t.is_default);
+    setDefaultTimeDisplay(defaultSlot?.description ?? "");
 
     const { data: availRows } = await supabase
       .from("availability")
@@ -212,6 +223,18 @@ export default function MatchMatrixPage() {
       if (streak.length > p.days_in_a_row) streak.forEach((d) => overloaded.add(`${p.id}_${d}`));
     }
   }
+
+  // Active courts, plus -- if this particular match already has a
+  // court assigned that's since been retired -- that court too, so
+  // the <select> doesn't silently blank out an existing assignment.
+  function courtOptionsFor(match: any) {
+    if (match?.court && !courts.some((c) => c.id === match.court.id)) {
+      return [...courts, match.court];
+    }
+    return courts;
+  }
+
+  const timeSlotDescriptions = timeSlots.map((t) => t.description);
 
   const selectedMatch = selected ? cellIndex[`${selected.playerId}_${selected.date}`] : null;
   const selectedPlayer = selected ? players.find((p) => p.id === selected.playerId) : null;
@@ -494,7 +517,7 @@ export default function MatchMatrixPage() {
                                 onChange={(e) => handleInlineCourtChange(m.id, e.target.value)}
                               >
                                 <option value="">Court TBD</option>
-                                {courts.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
+                                {courtOptionsFor(m).map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
                               </select>
                             ) : (
                               <div className="text-xs">{m.court?.name ?? "Court TBD"}</div>
@@ -505,7 +528,7 @@ export default function MatchMatrixPage() {
                                 defaultValue={
                                   !m.time_display
                                     ? "__default__"
-                                    : TIME_PRESETS.includes(m.time_display)
+                                    : timeSlotDescriptions.includes(m.time_display)
                                     ? m.time_display
                                     : "__custom__"
                                 }
@@ -514,7 +537,7 @@ export default function MatchMatrixPage() {
                                 }}
                               >
                                 <option value="__default__">Default ({defaultTimeDisplay})</option>
-                                {TIME_PRESETS.map((t) => <option key={t} value={t}>{t}</option>)}
+                                {timeSlotDescriptions.map((t) => <option key={t} value={t}>{t}</option>)}
                                 <option value="__custom__">Custom...</option>
                               </select>
                             ) : (
@@ -561,7 +584,7 @@ export default function MatchMatrixPage() {
               onChange={(e) => handleAssignCourt(e.target.value)}
             >
               <option value="">Court TBD</option>
-              {courts.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
+              {courtOptionsFor(selectedMatch).map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
             </select>
           ) : (
             <p>{selectedMatch.court?.name ?? "Court TBD"}</p>
@@ -574,7 +597,7 @@ export default function MatchMatrixPage() {
                 defaultValue={
                   !selectedMatch.time_display
                     ? "__default__"
-                    : TIME_PRESETS.includes(selectedMatch.time_display)
+                    : timeSlotDescriptions.includes(selectedMatch.time_display)
                     ? selectedMatch.time_display
                     : "__custom__"
                 }
@@ -584,10 +607,10 @@ export default function MatchMatrixPage() {
                 }}
               >
                 <option value="__default__">Default ({defaultTimeDisplay})</option>
-                {TIME_PRESETS.map((t) => <option key={t} value={t}>{t}</option>)}
+                {timeSlotDescriptions.map((t) => <option key={t} value={t}>{t}</option>)}
                 <option value="__custom__">Custom...</option>
               </select>
-              {(timeChoice === "__custom__" || (!TIME_PRESETS.includes(selectedMatch.time_display) && selectedMatch.time_display)) && (
+              {(timeChoice === "__custom__" || (!timeSlotDescriptions.includes(selectedMatch.time_display) && selectedMatch.time_display)) && (
                 <input
                   className="mt-1 w-full rounded border border-stone-300 px-1 py-0.5 text-sm"
                   defaultValue={selectedMatch.time_display || ""}

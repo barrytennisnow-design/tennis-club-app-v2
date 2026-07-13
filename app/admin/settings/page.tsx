@@ -1,7 +1,64 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { createClient } from "@/lib/supabaseClient";
+
+// ------------------------------------------------------------
+// Small reusable "Actions" dropdown -- avoids pulling in a menu
+// library just for a handful of per-row actions (edit / move /
+// default / clone / delete).
+// ------------------------------------------------------------
+type MenuAction = {
+  label: string;
+  onClick: () => void;
+  danger?: boolean;
+  disabled?: boolean;
+};
+
+function ActionsMenu({ actions }: { actions: MenuAction[] }) {
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    function onDocClick(e: MouseEvent) {
+      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
+    }
+    document.addEventListener("mousedown", onDocClick);
+    return () => document.removeEventListener("mousedown", onDocClick);
+  }, []);
+
+  return (
+    <div ref={ref} className="relative inline-block text-left">
+      <button
+        type="button"
+        onClick={() => setOpen((o) => !o)}
+        className="rounded-md border border-stone-300 px-2 py-1 text-xs hover:bg-stone-50"
+      >
+        Actions <span className="text-stone-400">▾</span>
+      </button>
+      {open && (
+        <div className="absolute right-0 z-10 mt-1 w-44 overflow-hidden rounded-md border bg-white shadow-lg">
+          {actions.map((a, i) => (
+            <button
+              key={i}
+              type="button"
+              disabled={a.disabled}
+              onClick={() => {
+                setOpen(false);
+                a.onClick();
+              }}
+              className={`block w-full px-3 py-1.5 text-left text-xs hover:bg-stone-50 disabled:cursor-not-allowed disabled:opacity-40 ${
+                a.danger ? "text-red-600" : "text-stone-700"
+              }`}
+            >
+              {a.label}
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
 
 export default function SettingsPage() {
   const supabase = createClient();
@@ -10,13 +67,15 @@ export default function SettingsPage() {
   const [settings, setSettings] = useState<any>(null);
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
-  
+  const [showRetiredCourts, setShowRetiredCourts] = useState(false);
+  const [showRetiredTimeSlots, setShowRetiredTimeSlots] = useState(false);
+
   // Modal states
   const [showCourtModal, setShowCourtModal] = useState(false);
   const [showTimeSlotModal, setShowTimeSlotModal] = useState(false);
   const [editingCourt, setEditingCourt] = useState<any>(null);
   const [editingTimeSlot, setEditingTimeSlot] = useState<any>(null);
-  
+
   // Form states
   const [courtName, setCourtName] = useState("");
   const [courtAddress, setCourtAddress] = useState("");
@@ -24,9 +83,9 @@ export default function SettingsPage() {
   const [timeSlotDesc, setTimeSlotDesc] = useState("");
 
   async function load() {
-    const { data: courtRows } = await supabase.from("courts").select("*").order("name");
+    const { data: courtRows } = await supabase.from("courts").select("*").order("sort_order").order("name");
     setCourts(courtRows ?? []);
-    const { data: timeSlotRows } = await supabase.from("time_slots").select("*").order("name");
+    const { data: timeSlotRows } = await supabase.from("time_slots").select("*").order("sort_order").order("name");
     setTimeSlots(timeSlotRows ?? []);
     const { data: settingsRow } = await supabase.from("club_settings").select("*").single();
     setSettings(settingsRow);
@@ -36,14 +95,22 @@ export default function SettingsPage() {
     load();
   }, []);
 
+  const activeCourts = courts.filter((c) => c.is_active);
+  const retiredCourts = courts.filter((c) => !c.is_active);
+  const activeTimeSlots = timeSlots.filter((t) => t.is_active);
+  const retiredTimeSlots = timeSlots.filter((t) => !t.is_active);
+
+  // --------------------------------------------------------
+  // Club-wide settings (timeout / nudge only -- default court
+  // and default time slot now live on the court/time-slot rows
+  // themselves, see is_default handling below).
+  // --------------------------------------------------------
   async function save() {
     setSaving(true);
     setSaved(false);
     await supabase
       .from("club_settings")
       .update({
-        default_court_id: settings.default_court_id || null,
-        default_time_display: settings.default_time_display,
         default_timeout_hours: settings.default_timeout_hours || 24,
         nudge_frequency_hours: settings.nudge_frequency_hours || 12,
       })
@@ -52,35 +119,89 @@ export default function SettingsPage() {
     setSaved(true);
   }
 
+  // --------------------------------------------------------
+  // Courts
+  // --------------------------------------------------------
   async function addCourt() {
     if (!courtName.trim()) return;
-    await supabase.from("courts").insert({ name: courtName.trim(), address: courtAddress.trim() || null });
-    setCourtName("");
-    setCourtAddress("");
-    setShowCourtModal(false);
+    const maxSort = courts.reduce((m, c) => Math.max(m, c.sort_order ?? 0), 0);
+    await supabase.from("courts").insert({
+      name: courtName.trim(),
+      address: courtAddress.trim() || null,
+      sort_order: maxSort + 10,
+      is_default: courts.length === 0, // first court ever added becomes default automatically
+      is_active: true,
+    });
+    closeCourtModal();
     load();
   }
 
   async function updateCourt() {
     if (!editingCourt || !courtName.trim()) return;
-    await supabase.from("courts").update({ name: courtName.trim(), address: courtAddress.trim() || null }).eq("id", editingCourt.id);
-    setCourtName("");
-    setCourtAddress("");
-    setEditingCourt(null);
-    setShowCourtModal(false);
+    await supabase
+      .from("courts")
+      .update({ name: courtName.trim(), address: courtAddress.trim() || null })
+      .eq("id", editingCourt.id);
+    closeCourtModal();
     load();
   }
 
-  async function deleteCourt(courtId: string) {
-    if (confirm("Are you sure you want to delete this court?")) {
-      await supabase.from("courts").delete().eq("id", courtId);
-      load();
+  async function cloneCourt(court: any) {
+    const maxSort = courts.reduce((m, c) => Math.max(m, c.sort_order ?? 0), 0);
+    await supabase.from("courts").insert({
+      name: `${court.name} (Copy)`,
+      address: court.address ?? null,
+      sort_order: maxSort + 10,
+      is_default: false,
+      is_active: true,
+    });
+    load();
+  }
+
+  async function deleteCourt(court: any) {
+    if (
+      !confirm(
+        `Retire "${court.name}"? It will disappear from the match matrix and auto-scheduling, but stays attached to any past matches. You can restore it later from "Show retired courts".`
+      )
+    )
+      return;
+    await supabase.from("courts").update({ is_active: false, is_default: false }).eq("id", court.id);
+    // If we just retired the default court, hand the default to
+    // whichever active court now sorts first, so the match matrix
+    // and generator never end up with no default at all.
+    if (court.is_default) {
+      const nextDefault = courts
+        .filter((c) => c.is_active && c.id !== court.id)
+        .sort((a, b) => (a.sort_order ?? 0) - (b.sort_order ?? 0))[0];
+      if (nextDefault) await supabase.from("courts").update({ is_default: true }).eq("id", nextDefault.id);
     }
+    load();
+  }
+
+  async function restoreCourt(court: any) {
+    const hasDefault = courts.some((c) => c.is_active && c.is_default);
+    await supabase
+      .from("courts")
+      .update({ is_active: true, is_default: !hasDefault })
+      .eq("id", court.id);
+    load();
   }
 
   async function setDefaultCourt(courtId: string) {
-    setSettings({ ...settings, default_court_id: courtId });
-    await save();
+    await supabase.from("courts").update({ is_default: false }).neq("id", courtId);
+    await supabase.from("courts").update({ is_default: true }).eq("id", courtId);
+    load();
+  }
+
+  async function moveCourt(court: any, direction: -1 | 1) {
+    const ordered = activeCourts.slice().sort((a, b) => (a.sort_order ?? 0) - (b.sort_order ?? 0));
+    const idx = ordered.findIndex((c) => c.id === court.id);
+    const swapIdx = idx + direction;
+    if (idx < 0 || swapIdx < 0 || swapIdx >= ordered.length) return;
+    const other = ordered[swapIdx];
+    await supabase.from("courts").update({ sort_order: other.sort_order }).eq("id", court.id);
+    await supabase.from("courts").update({ sort_order: court.sort_order }).eq("id", other.id);
+    load();
   }
 
   function openCourtModal(court?: any) {
@@ -103,38 +224,85 @@ export default function SettingsPage() {
     setCourtAddress("");
   }
 
+  // --------------------------------------------------------
+  // Time slots
+  // --------------------------------------------------------
   async function addTimeSlot() {
     if (!timeSlotName.trim() || !timeSlotDesc.trim()) return;
-    await supabase.from("time_slots").insert({ name: timeSlotName.trim(), description: timeSlotDesc.trim(), is_default: false });
-    setTimeSlotName("");
-    setTimeSlotDesc("");
-    setShowTimeSlotModal(false);
+    const maxSort = timeSlots.reduce((m, t) => Math.max(m, t.sort_order ?? 0), 0);
+    await supabase.from("time_slots").insert({
+      name: timeSlotName.trim(),
+      description: timeSlotDesc.trim(),
+      sort_order: maxSort + 10,
+      is_default: timeSlots.length === 0,
+      is_active: true,
+    });
+    closeTimeSlotModal();
     load();
   }
 
   async function updateTimeSlot() {
     if (!editingTimeSlot || !timeSlotName.trim() || !timeSlotDesc.trim()) return;
-    await supabase.from("time_slots").update({ name: timeSlotName.trim(), description: timeSlotDesc.trim() }).eq("id", editingTimeSlot.id);
-    setTimeSlotName("");
-    setTimeSlotDesc("");
-    setEditingTimeSlot(null);
-    setShowTimeSlotModal(false);
+    await supabase
+      .from("time_slots")
+      .update({ name: timeSlotName.trim(), description: timeSlotDesc.trim() })
+      .eq("id", editingTimeSlot.id);
+    closeTimeSlotModal();
     load();
   }
 
-  async function deleteTimeSlot(slotId: string) {
-    if (confirm("Are you sure you want to delete this time slot?")) {
-      await supabase.from("time_slots").delete().eq("id", slotId);
-      load();
+  async function cloneTimeSlot(slot: any) {
+    const maxSort = timeSlots.reduce((m, t) => Math.max(m, t.sort_order ?? 0), 0);
+    await supabase.from("time_slots").insert({
+      name: `${slot.name} (Copy)`,
+      description: slot.description,
+      sort_order: maxSort + 10,
+      is_default: false,
+      is_active: true,
+    });
+    load();
+  }
+
+  async function deleteTimeSlot(slot: any) {
+    if (
+      !confirm(
+        `Retire "${slot.name}"? It will disappear from the match matrix and auto-scheduling, but stays attached to any past matches. You can restore it later from "Show retired time slots".`
+      )
+    )
+      return;
+    await supabase.from("time_slots").update({ is_active: false, is_default: false }).eq("id", slot.id);
+    if (slot.is_default) {
+      const nextDefault = timeSlots
+        .filter((t) => t.is_active && t.id !== slot.id)
+        .sort((a, b) => (a.sort_order ?? 0) - (b.sort_order ?? 0))[0];
+      if (nextDefault) await supabase.from("time_slots").update({ is_default: true }).eq("id", nextDefault.id);
     }
+    load();
+  }
+
+  async function restoreTimeSlot(slot: any) {
+    const hasDefault = timeSlots.some((t) => t.is_active && t.is_default);
+    await supabase
+      .from("time_slots")
+      .update({ is_active: true, is_default: !hasDefault })
+      .eq("id", slot.id);
+    load();
   }
 
   async function setDefaultTimeSlot(slotId: string) {
-    // First, unset all defaults
     await supabase.from("time_slots").update({ is_default: false }).neq("id", slotId);
-    // Then set the new default
     await supabase.from("time_slots").update({ is_default: true }).eq("id", slotId);
-    setSettings({ ...settings, default_time_slot_id: slotId });
+    load();
+  }
+
+  async function moveTimeSlot(slot: any, direction: -1 | 1) {
+    const ordered = activeTimeSlots.slice().sort((a, b) => (a.sort_order ?? 0) - (b.sort_order ?? 0));
+    const idx = ordered.findIndex((t) => t.id === slot.id);
+    const swapIdx = idx + direction;
+    if (idx < 0 || swapIdx < 0 || swapIdx >= ordered.length) return;
+    const other = ordered[swapIdx];
+    await supabase.from("time_slots").update({ sort_order: other.sort_order }).eq("id", slot.id);
+    await supabase.from("time_slots").update({ sort_order: slot.sort_order }).eq("id", other.id);
     load();
   }
 
@@ -160,6 +328,9 @@ export default function SettingsPage() {
 
   if (!settings) return <p>Loading...</p>;
 
+  const sortedActiveCourts = activeCourts.slice().sort((a, b) => (a.sort_order ?? 0) - (b.sort_order ?? 0));
+  const sortedActiveTimeSlots = activeTimeSlots.slice().sort((a, b) => (a.sort_order ?? 0) - (b.sort_order ?? 0));
+
   return (
     <div className="max-w-4xl space-y-8">
       <h1 className="text-xl font-bold">Manager Settings</h1>
@@ -167,8 +338,14 @@ export default function SettingsPage() {
       {/* Court Management */}
       <div className="space-y-4">
         <div className="flex items-center justify-between">
-          <h2 className="text-lg font-semibold">Court Locations</h2>
-          <button onClick={() => openCourtModal()} className="rounded-md bg-court-green px-3 py-1 text-sm text-white">
+          <div>
+            <h2 className="text-lg font-semibold">Court Locations</h2>
+            <p className="text-xs text-stone-500">
+              The default court is used automatically by the match matrix and auto-scheduler. Reorder with the
+              Actions menu to control which court gets assigned first.
+            </p>
+          </div>
+          <button onClick={() => openCourtModal()} className="shrink-0 rounded-md bg-court-green px-3 py-1 text-sm text-white">
             + Add Court
           </button>
         </div>
@@ -176,6 +353,7 @@ export default function SettingsPage() {
           <table className="w-full text-sm">
             <thead className="bg-stone-100 text-left">
               <tr>
+                <th className="px-4 py-2 font-medium">Order</th>
                 <th className="px-4 py-2 font-medium">Name</th>
                 <th className="px-4 py-2 font-medium">Address</th>
                 <th className="px-4 py-2 font-medium">Default</th>
@@ -183,44 +361,85 @@ export default function SettingsPage() {
               </tr>
             </thead>
             <tbody>
-              {courts.map((c) => (
+              {sortedActiveCourts.map((c, i) => (
                 <tr key={c.id} className="border-t">
-                  <td className="px-4 py-2">{c.name}</td>
+                  <td className="px-4 py-2 text-stone-400">{i + 1}</td>
+                  <td className="px-4 py-2 font-medium">{c.name}</td>
                   <td className="px-4 py-2 text-stone-500">{c.address || "—"}</td>
                   <td className="px-4 py-2">
-                    {settings.default_court_id === c.id ? (
-                      <span className="text-court-green font-medium">✓ Default</span>
+                    {c.is_default ? (
+                      <span className="font-medium text-court-green">✓ Default</span>
                     ) : (
-                      <button onClick={() => setDefaultCourt(c.id)} className="text-court-green underline">
-                        Set Default
-                      </button>
+                      <span className="text-stone-300">—</span>
                     )}
                   </td>
                   <td className="px-4 py-2">
-                    <div className="flex gap-2">
-                      <button onClick={() => openCourtModal(c)} className="text-blue-600 underline">
-                        Edit
-                      </button>
-                      <button onClick={() => deleteCourt(c.id)} className="text-red-600 underline">
-                        Delete
-                      </button>
-                    </div>
+                    <ActionsMenu
+                      actions={[
+                        { label: "Edit", onClick: () => openCourtModal(c) },
+                        { label: "Move up", onClick: () => moveCourt(c, -1), disabled: i === 0 },
+                        { label: "Move down", onClick: () => moveCourt(c, 1), disabled: i === sortedActiveCourts.length - 1 },
+                        { label: c.is_default ? "Default ✓" : "Set as default", onClick: () => setDefaultCourt(c.id), disabled: c.is_default },
+                        { label: "Clone", onClick: () => cloneCourt(c) },
+                        { label: "Delete", onClick: () => deleteCourt(c), danger: true },
+                      ]}
+                    />
                   </td>
                 </tr>
               ))}
-              {courts.length === 0 && (
-                <tr><td colSpan={4} className="px-4 py-4 text-center text-stone-400">No courts added yet.</td></tr>
+              {sortedActiveCourts.length === 0 && (
+                <tr>
+                  <td colSpan={5} className="px-4 py-4 text-center text-stone-400">
+                    No courts added yet.
+                  </td>
+                </tr>
               )}
             </tbody>
           </table>
         </div>
+
+        {retiredCourts.length > 0 && (
+          <div className="text-sm">
+            <button
+              className="text-stone-500 underline"
+              onClick={() => setShowRetiredCourts((v) => !v)}
+            >
+              {showRetiredCourts ? "Hide" : "Show"} retired courts ({retiredCourts.length})
+            </button>
+            {showRetiredCourts && (
+              <div className="mt-2 overflow-x-auto rounded-md border">
+                <table className="w-full text-sm">
+                  <tbody>
+                    {retiredCourts.map((c) => (
+                      <tr key={c.id} className="border-t text-stone-400">
+                        <td className="px-4 py-2">{c.name}</td>
+                        <td className="px-4 py-2">{c.address || "—"}</td>
+                        <td className="px-4 py-2">
+                          <button onClick={() => restoreCourt(c)} className="text-court-green underline">
+                            Restore
+                          </button>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
+        )}
       </div>
 
       {/* Time Slot Management */}
       <div className="space-y-4">
         <div className="flex items-center justify-between">
-          <h2 className="text-lg font-semibold">Time Slots</h2>
-          <button onClick={() => openTimeSlotModal()} className="rounded-md bg-court-green px-3 py-1 text-sm text-white">
+          <div>
+            <h2 className="text-lg font-semibold">Match Times</h2>
+            <p className="text-xs text-stone-500">
+              The default time is shown automatically for any match the manager hasn't overridden. Reorder with the
+              Actions menu to control display order in dropdowns.
+            </p>
+          </div>
+          <button onClick={() => openTimeSlotModal()} className="shrink-0 rounded-md bg-court-green px-3 py-1 text-sm text-white">
             + Add Time Slot
           </button>
         </div>
@@ -228,6 +447,7 @@ export default function SettingsPage() {
           <table className="w-full text-sm">
             <thead className="bg-stone-100 text-left">
               <tr>
+                <th className="px-4 py-2 font-medium">Order</th>
                 <th className="px-4 py-2 font-medium">Name</th>
                 <th className="px-4 py-2 font-medium">Description</th>
                 <th className="px-4 py-2 font-medium">Default</th>
@@ -235,37 +455,72 @@ export default function SettingsPage() {
               </tr>
             </thead>
             <tbody>
-              {timeSlots.map((ts) => (
+              {sortedActiveTimeSlots.map((ts, i) => (
                 <tr key={ts.id} className="border-t">
-                  <td className="px-4 py-2">{ts.name}</td>
+                  <td className="px-4 py-2 text-stone-400">{i + 1}</td>
+                  <td className="px-4 py-2 font-medium">{ts.name}</td>
                   <td className="px-4 py-2 text-stone-500">{ts.description}</td>
                   <td className="px-4 py-2">
                     {ts.is_default ? (
-                      <span className="text-court-green font-medium">✓ Default</span>
+                      <span className="font-medium text-court-green">✓ Default</span>
                     ) : (
-                      <button onClick={() => setDefaultTimeSlot(ts.id)} className="text-court-green underline">
-                        Set Default
-                      </button>
+                      <span className="text-stone-300">—</span>
                     )}
                   </td>
                   <td className="px-4 py-2">
-                    <div className="flex gap-2">
-                      <button onClick={() => openTimeSlotModal(ts)} className="text-blue-600 underline">
-                        Edit
-                      </button>
-                      <button onClick={() => deleteTimeSlot(ts.id)} className="text-red-600 underline">
-                        Delete
-                      </button>
-                    </div>
+                    <ActionsMenu
+                      actions={[
+                        { label: "Edit", onClick: () => openTimeSlotModal(ts) },
+                        { label: "Move up", onClick: () => moveTimeSlot(ts, -1), disabled: i === 0 },
+                        { label: "Move down", onClick: () => moveTimeSlot(ts, 1), disabled: i === sortedActiveTimeSlots.length - 1 },
+                        { label: ts.is_default ? "Default ✓" : "Set as default", onClick: () => setDefaultTimeSlot(ts.id), disabled: ts.is_default },
+                        { label: "Clone", onClick: () => cloneTimeSlot(ts) },
+                        { label: "Delete", onClick: () => deleteTimeSlot(ts), danger: true },
+                      ]}
+                    />
                   </td>
                 </tr>
               ))}
-              {timeSlots.length === 0 && (
-                <tr><td colSpan={4} className="px-4 py-4 text-center text-stone-400">No time slots added yet.</td></tr>
+              {sortedActiveTimeSlots.length === 0 && (
+                <tr>
+                  <td colSpan={5} className="px-4 py-4 text-center text-stone-400">
+                    No time slots added yet.
+                  </td>
+                </tr>
               )}
             </tbody>
           </table>
         </div>
+
+        {retiredTimeSlots.length > 0 && (
+          <div className="text-sm">
+            <button
+              className="text-stone-500 underline"
+              onClick={() => setShowRetiredTimeSlots((v) => !v)}
+            >
+              {showRetiredTimeSlots ? "Hide" : "Show"} retired time slots ({retiredTimeSlots.length})
+            </button>
+            {showRetiredTimeSlots && (
+              <div className="mt-2 overflow-x-auto rounded-md border">
+                <table className="w-full text-sm">
+                  <tbody>
+                    {retiredTimeSlots.map((ts) => (
+                      <tr key={ts.id} className="border-t text-stone-400">
+                        <td className="px-4 py-2">{ts.name}</td>
+                        <td className="px-4 py-2">{ts.description}</td>
+                        <td className="px-4 py-2">
+                          <button onClick={() => restoreTimeSlot(ts)} className="text-court-green underline">
+                            Restore
+                          </button>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
+        )}
       </div>
 
       {/* Match Timeout */}

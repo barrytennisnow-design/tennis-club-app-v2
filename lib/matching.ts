@@ -46,13 +46,20 @@ export async function generateMatches({ supabaseAdmin, startDate, endDate }: Gen
     await supabaseAdmin.from("matches").delete().in("id", staleMatches.map((m: any) => m.id));
   }
 
-  const { data: settings } = await supabaseAdmin.from("club_settings").select("*").single();
-
-  const { data: courts } = await supabaseAdmin.from("courts").select("*").order("name");
+  // Courts are managed on the Manager Settings page (add / edit /
+  // reorder / default / retire / clone). Only ACTIVE courts are
+  // eligible for auto-assignment -- a retired court stays attached
+  // to its historical matches but is never picked for new ones.
+  // Ordering follows the manager's sort_order, and the designated
+  // default court (courts.is_default) is always preferred.
+  const { data: courts } = await supabaseAdmin
+    .from("courts")
+    .select("*")
+    .eq("is_active", true)
+    .order("sort_order")
+    .order("name");
   const courtList = courts && courts.length > 0 ? courts : [{ id: null, name: "Court TBD" }];
-  const defaultCourt = settings?.default_court_id
-    ? courtList.find((c: any) => c.id === settings.default_court_id)
-    : null;
+  const defaultCourt = courtList.find((c: any) => c.is_default) ?? null;
 
   const { data: availabilityRows } = await supabaseAdmin
     .from("availability")

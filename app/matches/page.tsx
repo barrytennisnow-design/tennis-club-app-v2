@@ -22,8 +22,15 @@ export default function MyMatchesPage() {
   const [busyId, setBusyId] = useState<string | null>(null);
 
   async function load() {
-    const { data: settings } = await supabase.from("club_settings").select("default_time_display").single();
-    if (settings) setTimeDisplay(settings.default_time_display);
+    // The default time is whatever the manager has flagged as
+    // default on the Match Times list in Manager Settings.
+    const { data: defaultSlot } = await supabase
+      .from("time_slots")
+      .select("description")
+      .eq("is_default", true)
+      .eq("is_active", true)
+      .maybeSingle();
+    if (defaultSlot) setTimeDisplay(defaultSlot.description);
 
     const { data: userData } = await supabase.auth.getUser();
     if (!userData.user) {
