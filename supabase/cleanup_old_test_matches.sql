@@ -1,4 +1,4 @@
--- Run this ONCE in Supabase SQL Editor to clear out old test matches
+-- Run this ONCE in Supabase SQL Editor to clear out old test matches ok
 -- created before the draft/propose workflow existed (back when
 -- "Generate Matches" created status='proposed' matches directly).
 -- Safe to run -- this only deletes rows in `matches` (and their
