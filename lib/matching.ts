@@ -25,13 +25,20 @@ export interface GenerateMatchesParams {
 }
 
 export async function generateMatches({ supabaseAdmin, startDate, endDate }: GenerateMatchesParams) {
-  // Get the highest existing match_number to start numbering from
+  // Number the new batch starting from the highest match_number that's
+  // actually visible on the Matches Tracking page (and to players) --
+  // i.e. proposed or confirmed matches. Draft and cancelled matches
+  // don't count: drafts are this function's own scratch pad and
+  // cancelled matches get wiped a few lines below, so neither should
+  // ever inflate the next number. If there are no proposed/confirmed
+  // matches at all, numbering restarts at M1.
   const { data: maxMatch } = await supabaseAdmin
     .from("matches")
     .select("match_number")
+    .in("status", ["proposed", "confirmed"])
     .order("match_number", { ascending: false })
     .limit(1)
-    .single();
+    .maybeSingle();
   let nextMatchNumber = (maxMatch?.match_number ?? 0) + 1;
 
   // Wipe existing DRAFT matches so this run starts clean, AND clean
