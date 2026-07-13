@@ -94,7 +94,21 @@ export async function generateMatches({ supabaseAdmin, startDate, endDate }: Gen
   const results: { date: string; time_slot: string; matchesCreated: number }[] = [];
   let courtCursor = 0;
 
-  for (const key of Object.keys(byDay)) {
+  // Match numbers are assigned in loop order below, so that order has
+  // to be chronological (earliest date first) -- otherwise whatever
+  // order Supabase happened to return availability rows in (NOT
+  // date order) determines numbering, which is what was causing
+  // later dates to sometimes get lower numbers than earlier ones.
+  // Same-day slots are then ordered by time_slot name as a stable
+  // tiebreaker.
+  const orderedKeys = Object.keys(byDay).sort((a, b) => {
+    const [dateA, slotA] = a.split("_");
+    const [dateB, slotB] = b.split("_");
+    if (dateA !== dateB) return dateA < dateB ? -1 : 1;
+    return slotA.localeCompare(slotB);
+  });
+
+  for (const key of orderedKeys) {
     const [date, time_slot] = key.split("_");
     const players = byDay[key]
       .slice()
