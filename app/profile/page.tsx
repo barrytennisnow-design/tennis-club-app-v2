@@ -43,6 +43,10 @@ export default function ProfilePage() {
       .update({
         email: player.email,
         phone: player.phone,
+        address: player.address,
+        city: player.city,
+        state: player.state,
+        zip: player.zip,
         days_per_week: player.days_per_week,
         days_in_a_row: player.days_in_a_row,
         self_reported_ranking: player.self_reported_ranking,
@@ -90,11 +94,28 @@ export default function ProfilePage() {
         </p>
       )}
 
-      {(player.address || player.city || player.state || player.zip) && (
-        <p className="text-sm text-stone-500">
-          {[player.address, player.city, player.state, player.zip].filter(Boolean).join(", ")}
-        </p>
-      )}
+      <div className="grid grid-cols-2 gap-4">
+        <label className="col-span-2 block text-sm font-medium">
+          Street address
+          <input className="input mt-1 w-full" value={player.address ?? ""}
+            onChange={(e) => setPlayer({ ...player, address: e.target.value })} />
+        </label>
+        <label className="block text-sm font-medium">
+          City
+          <input className="input mt-1 w-full" value={player.city ?? ""}
+            onChange={(e) => setPlayer({ ...player, city: e.target.value })} />
+        </label>
+        <label className="block text-sm font-medium">
+          State
+          <input className="input mt-1 w-full" value={player.state ?? ""}
+            onChange={(e) => setPlayer({ ...player, state: e.target.value })} />
+        </label>
+        <label className="block text-sm font-medium">
+          Zip
+          <input className="input mt-1 w-full" value={player.zip ?? ""}
+            onChange={(e) => setPlayer({ ...player, zip: e.target.value })} />
+        </label>
+      </div>
 
       <label className="block text-sm font-medium">
         Email

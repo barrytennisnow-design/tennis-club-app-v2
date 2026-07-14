@@ -119,11 +119,19 @@ export default function RosterPage() {
             {STATUS_OPTIONS.map((s) => <option key={s} value={s}>{s}</option>)}
           </select>
         );
-      case "ranking":
+      case "ranking": {
+        // p.ranking comes back from the DB as a number (e.g. 4, not
+        // "4.0"), so comparing it directly against the option strings
+        // below would never match "4.0" and the <select> would silently
+        // fall back to the blank/self-rank placeholder even though the
+        // value saved correctly. Match numerically instead.
+        const selectedOption = RANKING_OPTIONS.find(
+          (opt) => p.ranking != null && Number(opt) === Number(p.ranking)
+        );
         return (
           <select
             className="rounded border border-stone-300 px-1 py-0.5 text-xs"
-            value={p.ranking ?? ""}
+            value={selectedOption ?? ""}
             onChange={(e) => setRanking(p.id, e.target.value)}
           >
             <option value="">
@@ -132,6 +140,7 @@ export default function RosterPage() {
             {RANKING_OPTIONS.map((r) => <option key={r} value={r}>{r}</option>)}
           </select>
         );
+      }
       case "days_per_week":
         return p.days_per_week ?? "—";
       case "days_in_a_row":
