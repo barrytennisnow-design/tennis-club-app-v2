@@ -1,5 +1,5 @@
 -- ============================================================
--- Migration: lock the official `ranking` field to managers
+-- Migration: lock the official `ranking` field to managers tmp
 --
 -- `players.self_reported_ranking` -- what the player enters on
 -- signup/profile, always player-editable, never shown as "the"
