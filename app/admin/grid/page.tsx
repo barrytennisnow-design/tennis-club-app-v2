@@ -388,7 +388,9 @@ export default function MatchMatrixPage() {
       {loadError && (
         <p className="rounded bg-red-100 px-2 py-1 text-xs text-red-700">{loadError}</p>
       )}
-      <p className="text-xs text-stone-400">Debug: {matches.length} match(es) loaded for {days[0]} to {days[days.length - 1]}</p>
+      {lastResult && (
+        <p className="text-xs text-stone-500">{lastResult}</p>
+      )}
 
       <div className="flex flex-wrap items-center gap-2 rounded-md border px-2 py-1.5 text-sm">
         <span className="text-stone-500">Generate:</span>
@@ -430,8 +432,6 @@ export default function MatchMatrixPage() {
             <button onClick={() => setSwapSlots([])} className="text-purple-500 underline">clear</button>
           </div>
         )}
-
-        {lastResult && <span className="text-xs text-stone-500">{lastResult}</span>}
       </div>
 
       <div className="overflow-x-auto rounded-md border">
