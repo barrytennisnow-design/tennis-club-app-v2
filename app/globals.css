@@ -5,3 +5,16 @@
 body {
   @apply bg-stone-50 text-stone-900;
 }
+
+@layer components {
+  /* Used throughout profile/signup forms. text-base (16px) is
+     intentional -- iOS Safari auto-zooms the whole page in when you
+     focus an input smaller than 16px, which is a common source of
+     "everything jumps/looks broken" complaints on phones. */
+  .input {
+    @apply w-full rounded-md border border-stone-300 px-3 py-2 text-base;
+  }
+  .input:focus {
+    @apply border-court-green outline-none ring-2 ring-court-green/40;
+  }
+}

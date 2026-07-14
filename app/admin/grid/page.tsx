@@ -55,6 +55,7 @@ export default function MatchMatrixPage() {
   const [loading, setLoading] = useState(true);
   const [generating, setGenerating] = useState(false);
   const [lastResult, setLastResult] = useState<string | null>(null);
+  const [zoom, setZoom] = useState(100);
   const [startDate, setStartDate] = useState(isoDaysFromNow(0));
   const [endDate, setEndDate] = useState(isoDaysFromNow(29));
   const [viewStart, setViewStart] = useState(isoDaysFromNow(0));
@@ -383,7 +384,21 @@ export default function MatchMatrixPage() {
 
   return (
     <div className="space-y-1.5">
-      <h1 className="text-base font-bold">Match Matrix</h1>
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <h1 className="text-base font-bold">Match Matrix</h1>
+        <label className="flex items-center gap-1 text-xs text-stone-500">
+          Zoom
+          <select
+            value={zoom}
+            onChange={(e) => setZoom(Number(e.target.value))}
+            className="rounded border border-stone-300 px-1 py-0.5"
+          >
+            {[50, 60, 70, 80, 90, 100, 110, 125, 150].map((z) => (
+              <option key={z} value={z}>{z}%</option>
+            ))}
+          </select>
+        </label>
+      </div>
 
       {loadError && (
         <p className="rounded bg-red-100 px-2 py-1 text-xs text-red-700">{loadError}</p>
@@ -404,13 +419,15 @@ export default function MatchMatrixPage() {
           {generating ? "Generating..." : "Generate Match Matrix"}
         </button>
 
-        <span className="ml-2 text-stone-500">Showing:</span>
+        <span className="ml-2 text-stone-500">Show:</span>
         <input type="date" value={viewStart} onChange={(e) => setViewStart(e.target.value)}
           className="rounded border border-stone-300 px-1.5 py-0.5 text-xs" />
         <span className="text-stone-400">to</span>
         <input type="date" value={viewEnd} onChange={(e) => setViewEnd(e.target.value)}
           className="rounded border border-stone-300 px-1.5 py-0.5 text-xs" />
+      </div>
 
+      <div className="flex flex-wrap items-center gap-2">
         <button
           onClick={() => { setSwapMode(!swapMode); setSwapSlots([]); setSelected(null); }}
           className={`rounded-md px-3 py-1 text-xs font-medium ${swapMode ? "bg-purple-600 text-white" : "border border-purple-400 text-purple-700"}`}
@@ -435,6 +452,7 @@ export default function MatchMatrixPage() {
       </div>
 
       <div className="overflow-x-auto rounded-md border">
+        <div style={{ zoom: zoom / 100 }}>
         <table className="text-xs">
           <thead className="bg-stone-100">
             <tr>
@@ -497,7 +515,7 @@ export default function MatchMatrixPage() {
             ))}
             {/* Match details row */}
             <tr className="border-t bg-stone-50">
-              <td colSpan={3} className="px-2 py-1 font-medium text-stone-600">Match Details</td>
+              <td colSpan={3} className="px-2 py-1"></td>
               {days.map((d) => {
                 // Get unique matches for this day
                 const dayMatches = matches.filter((m) => m.match_date === d);
@@ -571,6 +589,7 @@ export default function MatchMatrixPage() {
             </tr>
           </tbody>
         </table>
+        </div>
       </div>
 
       {selectedMatch && selectedPlayer && (

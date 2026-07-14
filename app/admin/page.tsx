@@ -1,7 +1,6 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import Link from "next/link";
 import { createClient } from "@/lib/supabaseClient";
 import { formatPhone } from "@/lib/formatPhone";
 
@@ -65,19 +64,12 @@ export default function AdminHome() {
 
   return (
     <div className="space-y-8">
-      <div className="flex gap-4 text-sm">
-        <Link href="/admin/grid" className="underline text-court-green">Match Matrix</Link>
-        <Link href="/admin/matches" className="underline text-court-green">Matches</Link>
-        <Link href="/admin/roster" className="underline text-court-green">Roster</Link>
-        <Link href="/admin/settings" className="underline text-court-green">Settings</Link>
-      </div>
-
       <div>
         <h1 className="mb-4 text-xl font-bold">Pending Player Approvals ({pending.length})</h1>
         {pending.length === 0 && <p className="text-stone-500">No one waiting on approval.</p>}
         <div className="space-y-3">
           {pending.map((p) => (
-            <div key={p.id} className="flex items-center justify-between rounded-md border p-3">
+            <div key={p.id} className="flex flex-wrap items-center justify-between gap-2 rounded-md border p-3">
               <div>
                 <p className="font-medium">{p.first_name} {p.last_name}</p>
                 <p className="text-sm text-stone-500">{p.email} · {formatPhone(p.phone)}</p>
@@ -86,7 +78,7 @@ export default function AdminHome() {
                 </p>
                 {p.notes && <p className="text-sm italic text-stone-500">"{p.notes}"</p>}
               </div>
-              <div className="flex items-center gap-2">
+              <div className="flex flex-wrap items-center gap-2">
                 <select
                   className="rounded-md border border-stone-300 px-2 py-1 text-sm"
                   value={ratings[p.id] ?? p.self_reported_ranking ?? ""}

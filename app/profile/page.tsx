@@ -94,8 +94,8 @@ export default function ProfilePage() {
         </p>
       )}
 
-      <div className="grid grid-cols-2 gap-4">
-        <label className="col-span-2 block text-sm font-medium">
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+        <label className="block text-sm font-medium sm:col-span-2">
           Street address
           <input className="input mt-1 w-full" value={player.address ?? ""}
             onChange={(e) => setPlayer({ ...player, address: e.target.value })} />
@@ -139,7 +139,7 @@ export default function ProfilePage() {
         </select>
       </label>
 
-      <div className="grid grid-cols-2 gap-4">
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
         <label className="block text-sm font-medium">
           Days per week
           <select className="input mt-1 w-full" value={player.days_per_week ?? ""}

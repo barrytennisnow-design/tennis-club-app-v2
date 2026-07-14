@@ -50,7 +50,7 @@ export async function POST(request: Request) {
   // resulting match status.
   const { data: updatedMatch } = await admin
     .from("matches")
-    .select("*, court:courts(name), match_players(response_status, decline_reason, players(first_name, last_name, email))")
+    .select("*, court:courts(name, address), match_players(response_status, decline_reason, players(first_name, last_name, email, address, city, state, zip))")
     .eq("id", mpRow.match_id)
     .single();
 
@@ -72,12 +72,17 @@ export async function POST(request: Request) {
     for (const mp of updatedMatch.match_players) {
       if (!mp.players) continue;
       const teammates = playerNames.filter((n: string) => n !== `${mp.players.first_name} ${mp.players.last_name}`);
+      const playerAddress = [mp.players.address, mp.players.city, mp.players.state, mp.players.zip]
+        .filter(Boolean)
+        .join(", ") || null;
       const { subject, html } = matchConfirmedEmail({
         matchNumber: updatedMatch.match_number,
         firstName: mp.players.first_name,
         matchDate: updatedMatch.match_date,
         timeSlot: timeDisplay,
         courtName: updatedMatch.court?.name ?? "Court TBD",
+        courtAddress: updatedMatch.court?.address ?? null,
+        playerAddress,
         teammates,
       });
       await sendEmail({

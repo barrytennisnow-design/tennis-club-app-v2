@@ -78,7 +78,7 @@ export default function SignupPage() {
     <form onSubmit={handleSubmit} className="space-y-4">
       <h1 className="text-xl font-bold">New Player Signup</h1>
 
-      <div className="grid grid-cols-2 gap-4">
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
         <input required placeholder="First name" className="input"
           value={form.first_name} onChange={(e) => update("first_name", e.target.value)} />
         <input required placeholder="Last name" className="input"
@@ -92,7 +92,7 @@ export default function SignupPage() {
 
       <input placeholder="Address" className="input w-full"
         value={form.address} onChange={(e) => update("address", e.target.value)} />
-      <div className="grid grid-cols-3 gap-4">
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
         <input placeholder="City" className="input"
           value={form.city} onChange={(e) => update("city", e.target.value)} />
         <input placeholder="State" className="input"
@@ -111,7 +111,7 @@ export default function SignupPage() {
         </select>
       </label>
 
-      <div className="grid grid-cols-2 gap-4">
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
         <label className="block text-sm font-medium">
           Days per week you'd like to play
           <select className="input mt-1 w-full" value={form.days_per_week}

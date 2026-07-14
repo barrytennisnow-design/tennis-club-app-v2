@@ -12,6 +12,8 @@ const STATUS_OPTIONS = ["pending", "active", "paused", "declined"];
 const ALL_COLUMNS: { key: string; label: string }[] = [
   { key: "first_name", label: "First" },
   { key: "last_name", label: "Last" },
+  { key: "matches_played", label: "Matches Played" },
+  { key: "matches_declined", label: "Matches Declined" },
   { key: "status", label: "Status" },
   { key: "ranking", label: "Rating" },
   { key: "email", label: "Email" },
@@ -41,6 +43,7 @@ export default function RosterPage() {
   const [message, setMessage] = useState<string | null>(null);
   const [columnOrder, setColumnOrder] = useState<string[]>(DEFAULT_ORDER);
   const [showColumnEditor, setShowColumnEditor] = useState(false);
+  const [matchStats, setMatchStats] = useState<Record<string, { played: number; declined: number }>>({});
 
   useEffect(() => {
     const saved = typeof window !== "undefined" ? localStorage.getItem(STORAGE_KEY) : null;
@@ -70,8 +73,28 @@ export default function RosterPage() {
   }
 
   async function load() {
-    const { data } = await supabase.from("players").select("*").order("last_name");
+    const { data } = await supabase
+      .from("players")
+      .select("*")
+      .order("first_name")
+      .order("last_name");
     setPlayers(data ?? []);
+
+    // "Matches Played" = confirmed matches this player was in.
+    // "Matches Declined" = proposed matches this player declined/
+    // rejected. Both computed from match_players directly rather
+    // than stored counters, so they're always accurate even if a
+    // match's status changes after the fact.
+    const { data: mpRows } = await supabase
+      .from("match_players")
+      .select("player_id, response_status, matches!inner(status)");
+    const stats: Record<string, { played: number; declined: number }> = {};
+    for (const row of mpRows ?? []) {
+      const s = stats[row.player_id] ?? (stats[row.player_id] = { played: 0, declined: 0 });
+      if ((row as any).matches?.status === "confirmed") s.played++;
+      if (row.response_status === "declined") s.declined++;
+    }
+    setMatchStats(stats);
   }
 
   useEffect(() => {
@@ -109,6 +132,10 @@ export default function RosterPage() {
 
   function renderCell(p: any, key: string) {
     switch (key) {
+      case "matches_played":
+        return matchStats[p.id]?.played ?? 0;
+      case "matches_declined":
+        return matchStats[p.id]?.declined ?? 0;
       case "status":
         return (
           <select

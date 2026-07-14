@@ -167,12 +167,20 @@ export function matchNudgeEmail({
   };
 }
 
+function buildDirectionsUrl(destination: string, origin?: string | null) {
+  const params = new URLSearchParams({ api: "1", destination });
+  if (origin) params.set("origin", origin);
+  return `https://www.google.com/maps/dir/?${params.toString()}`;
+}
+
 export function matchConfirmedEmail({
   matchNumber,
   firstName,
   matchDate,
   timeSlot,
   courtName,
+  courtAddress,
+  playerAddress,
   teammates,
 }: {
   matchNumber: number | string;
@@ -180,9 +188,17 @@ export function matchConfirmedEmail({
   matchDate: string;
   timeSlot: string;
   courtName: string;
+  courtAddress?: string | null;
+  playerAddress?: string | null;
   teammates: string[];
 }) {
   const displayDate = formatShortDate(matchDate);
+  // Directions need a destination at minimum -- the court's address.
+  // The player's own address (their profile "Street address" plus
+  // city/state/zip) is used as the starting point when we have it;
+  // if not, the link still works, Google Maps just asks the player
+  // for a starting location instead of assuming one.
+  const directionsUrl = courtAddress ? buildDirectionsUrl(courtAddress, playerAddress) : null;
   return {
     subject: `Confirmed: your match on ${displayDate}`,
     html: `
@@ -192,9 +208,14 @@ export function matchConfirmedEmail({
         <li><strong>Match ID:</strong> M${matchNumber}</li>
         <li><strong>Date:</strong> ${displayDate}</li>
         <li><strong>Time:</strong> ${timeSlot}</li>
-        <li><strong>Court:</strong> ${courtName}</li>
+        <li><strong>Court:</strong> ${courtName}${courtAddress ? ` — ${courtAddress}` : ""}</li>
         <li><strong>Playing with:</strong> ${teammates.join(", ")}</li>
       </ul>
+      ${
+        directionsUrl
+          ? `<p><a href="${directionsUrl}" style="display:inline-block;padding:8px 16px;background:#2d5a3d;color:#ffffff;border-radius:6px;text-decoration:none;">Get Directions</a></p>`
+          : ""
+      }
       <p>A calendar invite is attached — tap it to add this to your calendar.</p>
     `,
   };

@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabaseClient";
 
-const WEEKDAY_HEADERS = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"];
+const WEEKDAY_HEADERS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
 
 function toISODate(d: Date) {
   return d.toISOString().slice(0, 10);
@@ -137,7 +137,7 @@ export default function AvailabilityPage() {
         {saving && <span className="ml-2 text-court-green">Saving...</span>}
       </p>
 
-      <div className="grid grid-cols-7 gap-2">
+      <div className="grid grid-cols-7 gap-1 sm:gap-2">
         {WEEKDAY_HEADERS.map((wd) => (
           <div key={wd} className="text-center text-[11px] font-semibold uppercase tracking-wide text-stone-500">
             {wd}
@@ -159,7 +159,7 @@ export default function AvailabilityPage() {
                 key={key}
                 type="button"
                 onClick={() => (isLocked ? router.push(`/matches#match-${match.id}`) : toggleDay(d))}
-                className={`rounded-md border p-2 text-xs ${
+                className={`rounded-md border p-1 text-[11px] sm:p-2 sm:text-xs ${
                   isLocked
                     ? "cursor-pointer bg-stone-200 text-stone-500 hover:bg-stone-300"
                     : isAvail
@@ -169,7 +169,7 @@ export default function AvailabilityPage() {
               >
                 <div>{d.toLocaleDateString(undefined, { month: "short", day: "numeric" })}</div>
                 {isLocked && (
-                  <div className="mt-1 font-bold leading-tight">
+                  <div className="mt-1 text-[8px] font-bold leading-tight sm:text-[10px]">
                     {match.status === "confirmed" ? "CONFIRMED MATCH" : "PROPOSED MATCH"}
                   </div>
                 )}
