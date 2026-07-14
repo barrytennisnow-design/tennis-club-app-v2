@@ -127,7 +127,7 @@ export default function MyMatchesPage() {
           : null;
 
         return (
-          <div key={mp.id} className="rounded-md border p-4">
+          <div key={mp.id} id={`match-${mp.matches.id}`} className="scroll-mt-4 rounded-md border p-4">
             <p className="font-semibold">
               Match ID: M{mp.matches.match_number}{" "}
               <span className={

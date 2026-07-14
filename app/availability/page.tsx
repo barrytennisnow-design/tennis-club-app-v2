@@ -1,31 +1,54 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabaseClient";
 
-function next30Days() {
-  const days = [];
-  const today = new Date();
-  for (let i = 0; i < 30; i++) {
-    const d = new Date(today);
-    d.setDate(today.getDate() + i);
-    days.push(d);
-  }
-  return days;
-}
+const WEEKDAY_HEADERS = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"];
 
 function toISODate(d: Date) {
   return d.toISOString().slice(0, 10);
 }
 
+// Monday = 0 ... Sunday = 6 (JS's Date.getDay() is Sunday-first, so shift it)
+function mondayBasedWeekday(d: Date) {
+  const day = d.getDay();
+  return day === 0 ? 6 : day - 1;
+}
+
+// Builds full calendar weeks (Mon-Sun) covering the next `numDays`
+// days starting today, padding the front of the first week and the
+// tail of the last week with nulls so every row lines up under the
+// Monday..Sunday headers.
+function buildCalendarWeeks(numDays: number): (Date | null)[][] {
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  const leadingBlanks = mondayBasedWeekday(today);
+
+  const cells: (Date | null)[] = [];
+  for (let i = 0; i < leadingBlanks; i++) cells.push(null);
+  for (let i = 0; i < numDays; i++) {
+    const d = new Date(today);
+    d.setDate(today.getDate() + i);
+    cells.push(d);
+  }
+  while (cells.length % 7 !== 0) cells.push(null);
+
+  const weeks: (Date | null)[][] = [];
+  for (let i = 0; i < cells.length; i += 7) weeks.push(cells.slice(i, i + 7));
+  return weeks;
+}
+
 export default function AvailabilityPage() {
   const supabase = createClient();
+  const router = useRouter();
   const [player, setPlayer] = useState<any>(null);
   const [available, setAvailable] = useState<Set<string>>(new Set());
-  const [locked, setLocked] = useState<Set<string>>(new Set());
+  // Keyed by date ('YYYY-MM-DD') -> the active match tying that day up.
+  const [matchByDate, setMatchByDate] = useState<Record<string, { id: string; match_number: number; status: string }>>({});
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
-  const days = next30Days();
+  const weeks = buildCalendarWeeks(30);
 
   useEffect(() => {
     (async () => {
@@ -48,11 +71,22 @@ export default function AvailabilityPage() {
           .eq("player_id", p.id);
         setAvailable(new Set((avail ?? []).map((a) => `${a.date}_${a.time_slot}`)));
 
-        const { data: lockedRows } = await supabase
-          .from("locked_availability")
-          .select("date, time_slot")
-          .eq("player_id", p.id);
-        setLocked(new Set((lockedRows ?? []).map((a: any) => `${a.date}_${a.time_slot}`)));
+        // Pull the player's own proposed/confirmed matches directly
+        // (RLS already scopes this to "matches they're in") so each
+        // locked day knows its match id, number, and status -- the
+        // old locked_availability view only gave a yes/no flag.
+        const { data: matchRows } = await supabase
+          .from("match_players")
+          .select("matches!inner(id, match_number, match_date, status)")
+          .eq("player_id", p.id)
+          .in("matches.status", ["proposed", "confirmed"]);
+
+        const byDate: Record<string, { id: string; match_number: number; status: string }> = {};
+        for (const row of matchRows ?? []) {
+          const m = (row as any).matches;
+          if (m) byDate[m.match_date] = { id: m.id, match_number: m.match_number, status: m.status };
+        }
+        setMatchByDate(byDate);
       }
       setLoading(false);
     })();
@@ -60,7 +94,7 @@ export default function AvailabilityPage() {
 
   async function toggleDay(date: Date) {
     const key = `${toISODate(date)}_morning`;
-    if (locked.has(key)) return; // can't edit — tied to a proposed/confirmed match
+    if (matchByDate[toISODate(date)]) return; // can't edit — tied to a proposed/confirmed match
 
     const isAvailable = available.has(key);
     setSaving(true);
@@ -98,37 +132,51 @@ export default function AvailabilityPage() {
       <h1 className="text-xl font-bold">Your availability — next 30 days</h1>
       <p className="text-sm text-stone-600">
         Tap a day to mark yourself available (mornings). Greyed-out days are
-        locked because you're in a proposed or confirmed match that day.
+        locked because you're in a proposed or confirmed match that day —
+        tap one to jump to it on My Matches.
         {saving && <span className="ml-2 text-court-green">Saving...</span>}
       </p>
 
-      <div className="grid grid-cols-5 gap-2 sm:grid-cols-7">
-        {days.map((d) => {
-          const key = `${toISODate(d)}_morning`;
-          const isAvail = available.has(key);
-          const isLocked = locked.has(key);
-          return (
-            <button
-              key={key}
-              type="button"
-              disabled={isLocked}
-              onClick={() => toggleDay(d)}
-              className={`rounded-md border p-2 text-xs ${
-                isLocked
-                  ? "cursor-not-allowed bg-stone-100 text-stone-400"
-                  : isAvail
-                  ? "bg-court-green text-white"
-                  : "bg-white hover:bg-stone-50"
-              }`}
-            >
-              <div className="font-semibold">
-                {d.toLocaleDateString(undefined, { weekday: "short" })}
-              </div>
-              <div>{d.toLocaleDateString(undefined, { month: "short", day: "numeric" })}</div>
-              {isLocked && <div className="mt-1">in match</div>}
-            </button>
-          );
-        })}
+      <div className="grid grid-cols-7 gap-2">
+        {WEEKDAY_HEADERS.map((wd) => (
+          <div key={wd} className="text-center text-[11px] font-semibold uppercase tracking-wide text-stone-500">
+            {wd}
+          </div>
+        ))}
+
+        {weeks.map((week, wi) =>
+          week.map((d, di) => {
+            if (!d) return <div key={`blank-${wi}-${di}`} />;
+
+            const dateKey = toISODate(d);
+            const key = `${dateKey}_morning`;
+            const isAvail = available.has(key);
+            const match = matchByDate[dateKey];
+            const isLocked = !!match;
+
+            return (
+              <button
+                key={key}
+                type="button"
+                onClick={() => (isLocked ? router.push(`/matches#match-${match.id}`) : toggleDay(d))}
+                className={`rounded-md border p-2 text-xs ${
+                  isLocked
+                    ? "cursor-pointer bg-stone-200 text-stone-500 hover:bg-stone-300"
+                    : isAvail
+                    ? "bg-court-green text-white"
+                    : "bg-white hover:bg-stone-50"
+                }`}
+              >
+                <div>{d.toLocaleDateString(undefined, { month: "short", day: "numeric" })}</div>
+                {isLocked && (
+                  <div className="mt-1 font-bold leading-tight">
+                    {match.status === "confirmed" ? "CONFIRMED MATCH" : "PROPOSED MATCH"}
+                  </div>
+                )}
+              </button>
+            );
+          })
+        )}
       </div>
     </div>
   );
