@@ -52,6 +52,16 @@ export async function POST(request: Request) {
   const defaultTimeDisplay = await getDefaultTimeDisplay(admin);
   const timeDisplay = resolveTimeDisplay(match, defaultTimeDisplay);
 
+  // Lock the resolved time onto the match row itself right now. This
+  // is what guarantees the time shown in this proposal email is the
+  // EXACT same time that ends up on the confirmed email and its .ics
+  // file later -- even if the manager changes the default time slot
+  // in Manager Settings while this match is still awaiting responses.
+  // (If the manager already set a custom time_display on this match
+  // before proposing, timeDisplay already equals that override, so
+  // this write-back is a harmless no-op in that case.)
+  await admin.from("matches").update({ time_display: timeDisplay }).eq("id", match_id);
+
   // No .ics attachment at proposal time -- a match can still fall
   // through (declined / timed out), so a downloadable calendar file
   // is only offered once it's actually confirmed (see
