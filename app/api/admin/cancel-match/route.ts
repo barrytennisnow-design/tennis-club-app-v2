@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { createClient, createAdminClient } from "@/lib/supabaseServer";
 import { sendEmail, matchCancelledEmail } from "@/lib/email";
+import { getDefaultTimeDisplay, resolveTimeDisplay } from "@/lib/timeDisplay";
 
 export async function POST(request: Request) {
   const { match_id } = await request.json();
@@ -33,12 +34,15 @@ export async function POST(request: Request) {
   if (updateError) return NextResponse.json({ error: updateError.message }, { status: 500 });
 
   if (!wasDraft) {
+    const defaultTimeDisplay = await getDefaultTimeDisplay(admin);
+    const timeDisplay = resolveTimeDisplay(match, defaultTimeDisplay);
     for (const mp of match.match_players) {
       if (!mp.players) continue;
       const { subject, html } = matchCancelledEmail({
+        matchNumber: match.match_number,
         firstName: mp.players.first_name,
         matchDate: match.match_date,
-        timeSlot: match.time_slot,
+        timeSlot: timeDisplay,
         reason: "cancelled by the manager",
       });
       await sendEmail({ supabaseAdmin: admin, to: mp.players.email, subject, html });

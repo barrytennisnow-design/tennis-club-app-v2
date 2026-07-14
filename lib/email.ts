@@ -7,6 +7,7 @@
 // 'skipped_no_api_key' so nothing throws in local/dev without a key.
 
 import { Resend } from "resend";
+import { formatShortDate } from "./formatDate";
 
 let resendClient: Resend | null = null;
 function getResend() {
@@ -101,31 +102,38 @@ export function accessLinkEmail({
 }
 
 export function matchProposedEmail({
+  matchNumber,
   firstName,
   matchDate,
   timeSlot,
   courtName,
   teammates,
   acceptUrl,
+  conflictNote,
 }: {
+  matchNumber: number | string;
   firstName: string;
   matchDate: string;
   timeSlot: string;
   courtName: string;
   teammates: string[];
   acceptUrl: string;
+  conflictNote?: string | null;
 }) {
+  const displayDate = formatShortDate(matchDate);
   return {
-    subject: `New match proposed: ${matchDate}`,
+    subject: `New match proposed: ${displayDate}`,
     html: `
       <p>Hi ${firstName},</p>
       <p>You've been proposed for a match:</p>
       <ul>
-        <li><strong>Date:</strong> ${matchDate}</li>
+        <li><strong>Match ID:</strong> M${matchNumber}</li>
+        <li><strong>Date:</strong> ${displayDate}</li>
         <li><strong>Time:</strong> ${timeSlot}</li>
         <li><strong>Court:</strong> ${courtName}</li>
         <li><strong>Playing with:</strong> ${teammates.join(", ")}</li>
       </ul>
+      ${conflictNote ? `<p style="color:#b45309;"><strong>⚠️ Possible conflict:</strong> ${conflictNote}</p>` : ""}
       <p>Please accept or decline as soon as you can — the match will
       auto-cancel if everyone hasn't accepted in time.</p>
       <p><a href="${acceptUrl}">Respond to this match</a></p>
@@ -134,22 +142,25 @@ export function matchProposedEmail({
 }
 
 export function matchNudgeEmail({
+  matchNumber,
   firstName,
   matchDate,
   timeSlot,
   acceptUrl,
 }: {
+  matchNumber: number | string;
   firstName: string;
   matchDate: string;
   timeSlot: string;
   acceptUrl: string;
 }) {
+  const displayDate = formatShortDate(matchDate);
   return {
-    subject: `Reminder: respond to your ${matchDate} match`,
+    subject: `Reminder: respond to your ${displayDate} match`,
     html: `
       <p>Hi ${firstName},</p>
-      <p>Just a reminder — you still have a proposed match on
-      <strong>${matchDate}</strong> (${timeSlot}) waiting on your response.
+      <p>Just a reminder — you still have a proposed match, <strong>Match ID: M${matchNumber}</strong>,
+      on <strong>${displayDate}</strong> (${timeSlot}) waiting on your response.
       It will be automatically cancelled if you don't respond in time.</p>
       <p><a href="${acceptUrl}">Respond now</a></p>
     `,
@@ -157,25 +168,29 @@ export function matchNudgeEmail({
 }
 
 export function matchConfirmedEmail({
+  matchNumber,
   firstName,
   matchDate,
   timeSlot,
   courtName,
   teammates,
 }: {
+  matchNumber: number | string;
   firstName: string;
   matchDate: string;
   timeSlot: string;
   courtName: string;
   teammates: string[];
 }) {
+  const displayDate = formatShortDate(matchDate);
   return {
-    subject: `Confirmed: your match on ${matchDate}`,
+    subject: `Confirmed: your match on ${displayDate}`,
     html: `
       <p>Hi ${firstName},</p>
       <p>Everyone accepted — your match is confirmed! 🎾</p>
       <ul>
-        <li><strong>Date:</strong> ${matchDate}</li>
+        <li><strong>Match ID:</strong> M${matchNumber}</li>
+        <li><strong>Date:</strong> ${displayDate}</li>
         <li><strong>Time:</strong> ${timeSlot}</li>
         <li><strong>Court:</strong> ${courtName}</li>
         <li><strong>Playing with:</strong> ${teammates.join(", ")}</li>
@@ -186,23 +201,26 @@ export function matchConfirmedEmail({
 }
 
 export function matchCancelledEmail({
+  matchNumber,
   firstName,
   matchDate,
   timeSlot,
   reason,
   declineReason,
 }: {
+  matchNumber: number | string;
   firstName: string;
   matchDate: string;
   timeSlot: string;
   reason: string;
   declineReason?: string | null;
 }) {
+  const displayDate = formatShortDate(matchDate);
   return {
-    subject: `Match cancelled: ${matchDate}`,
+    subject: `Match cancelled: ${displayDate}`,
     html: `
       <p>Hi ${firstName},</p>
-      <p>Your match on <strong>${matchDate}</strong> (${timeSlot}) has been
+      <p>Your match, <strong>Match ID: M${matchNumber}</strong>, on <strong>${displayDate}</strong> (${timeSlot}) has been
       cancelled. Reason: ${reason}</p>
       ${declineReason ? `<p>Reason given: "${declineReason}"</p>` : ""}
       <p>Check your availability and matches page for updates.</p>

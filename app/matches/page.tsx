@@ -97,7 +97,7 @@ export default function MyMatchesPage() {
     const ics = buildMatchIcs({
       matchId: match.id,
       matchDate: match.match_date,
-      timeSlot: match.time_slot,
+      timeDisplay: match.time_display || timeDisplay,
       courtName: match.court?.name ?? "Court TBD",
       playerNames,
     });

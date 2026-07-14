@@ -15,6 +15,7 @@
 import { NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabaseServer";
 import { sendEmail, matchNudgeEmail, matchCancelledEmail } from "@/lib/email";
+import { getDefaultTimeDisplay, resolveTimeDisplay } from "@/lib/timeDisplay";
 
 export async function GET(request: Request) {
   const authHeader = request.headers.get("authorization");
@@ -34,10 +35,13 @@ export async function GET(request: Request) {
     .select("*, court:courts(name), match_players(id, response_status, players(first_name, email))")
     .eq("status", "proposed");
 
+  const defaultTimeDisplay = await getDefaultTimeDisplay(supabaseAdmin);
+
   let nudged = 0;
   let cancelled = 0;
 
   for (const match of proposedMatches ?? []) {
+    const timeDisplay = resolveTimeDisplay(match, defaultTimeDisplay);
     const proposedAt = new Date(match.proposed_at);
     const hoursElapsed = (now.getTime() - proposedAt.getTime()) / (1000 * 60 * 60);
     const deadline = match.auto_cancel_hours ?? 24;
@@ -52,9 +56,10 @@ export async function GET(request: Request) {
       for (const mp of match.match_players) {
         if (!mp.players) continue;
         const { subject, html } = matchCancelledEmail({
+          matchNumber: match.match_number,
           firstName: mp.players.first_name,
           matchDate: match.match_date,
-          timeSlot: match.time_slot,
+          timeSlot: timeDisplay,
           reason: "not all players responded before the deadline",
         });
         await sendEmail({ supabaseAdmin, to: mp.players.email, subject, html });
@@ -75,9 +80,10 @@ export async function GET(request: Request) {
         for (const mp of pending) {
           if (!mp.players) continue;
           const { subject, html } = matchNudgeEmail({
+            matchNumber: match.match_number,
             firstName: mp.players.first_name,
             matchDate: match.match_date,
-            timeSlot: match.time_slot,
+            timeSlot: timeDisplay,
             acceptUrl: `${process.env.NEXT_PUBLIC_SITE_URL ?? ""}/matches`,
           });
           await sendEmail({ supabaseAdmin, to: mp.players.email, subject, html });

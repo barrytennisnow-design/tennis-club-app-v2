@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { createClient, createAdminClient } from "@/lib/supabaseServer";
 import { sendEmail, matchConfirmedEmail, matchCancelledEmail } from "@/lib/email";
 import { buildMatchIcs } from "@/lib/ics";
+import { getDefaultTimeDisplay, resolveTimeDisplay } from "@/lib/timeDisplay";
 
 export async function POST(request: Request) {
   const { match_player_id, response, decline_reason } = await request.json();
@@ -57,10 +58,12 @@ export async function POST(request: Request) {
 
   if (updatedMatch.status === "confirmed") {
     const playerNames = updatedMatch.match_players.map((mp: any) => mp.players ? `${mp.players.first_name} ${mp.players.last_name}` : 'Unknown');
+    const defaultTimeDisplay = await getDefaultTimeDisplay(admin);
+    const timeDisplay = resolveTimeDisplay(updatedMatch, defaultTimeDisplay);
     const ics = buildMatchIcs({
       matchId: mpRow.match_id,
       matchDate: updatedMatch.match_date,
-      timeSlot: updatedMatch.time_slot,
+      timeDisplay,
       courtName: updatedMatch.court?.name ?? "Court TBD",
       playerNames,
     });
@@ -70,9 +73,10 @@ export async function POST(request: Request) {
       if (!mp.players) continue;
       const teammates = playerNames.filter((n: string) => n !== `${mp.players.first_name} ${mp.players.last_name}`);
       const { subject, html } = matchConfirmedEmail({
+        matchNumber: updatedMatch.match_number,
         firstName: mp.players.first_name,
         matchDate: updatedMatch.match_date,
-        timeSlot: updatedMatch.time_slot,
+        timeSlot: timeDisplay,
         courtName: updatedMatch.court?.name ?? "Court TBD",
         teammates,
       });
@@ -85,12 +89,15 @@ export async function POST(request: Request) {
       });
     }
   } else if (updatedMatch.status === "cancelled" && response === "declined") {
+    const defaultTimeDisplay = await getDefaultTimeDisplay(admin);
+    const timeDisplay = resolveTimeDisplay(updatedMatch, defaultTimeDisplay);
     for (const mp of updatedMatch.match_players) {
       if (!mp.players) continue;
       const { subject, html } = matchCancelledEmail({
+        matchNumber: updatedMatch.match_number,
         firstName: mp.players.first_name,
         matchDate: updatedMatch.match_date,
-        timeSlot: updatedMatch.time_slot,
+        timeSlot: timeDisplay,
         reason: "a player declined",
         declineReason: decline_reason || null,
       });

@@ -1,11 +1,33 @@
-// Builds a .ics calendar-invite file for a confirmed match, so
-// players can add it to their calendar with one tap. "morning" is
-// mapped to a concrete 8-10am slot -- adjust TIME_SLOTS below if
-// you add more slot options later.
+// Builds a .ics calendar-invite file for a CONFIRMED match only (never
+// for a proposed one -- see propose-match/route.ts). The event's start
+// time is parsed out of the match's actual display time (e.g. "8:00am
+// warmup, 8:15am start play"), so it always matches whatever time is
+// shown to the player -- default or manager override -- instead of a
+// fixed slot.
 
-const TIME_SLOTS: Record<string, { start: string; end: string }> = {
-  morning: { start: "080000", end: "100000" },
-};
+const FALLBACK_START = "080000"; // used only if the display text has no parseable time at all
+const DEFAULT_DURATION_MINUTES = 120; // matches the old fixed 2-hour block
+
+function parseStartTime(display: string): { start: string; end: string } {
+  const match = display.match(/(\d{1,2}):(\d{2})\s*(am|pm)/i);
+  if (!match) {
+    const endHour = (parseInt(FALLBACK_START.slice(0, 2), 10) + 2) % 24;
+    return { start: FALLBACK_START, end: `${String(endHour).padStart(2, "0")}${FALLBACK_START.slice(2)}` };
+  }
+
+  let hour = parseInt(match[1], 10);
+  const minute = match[2];
+  const meridiem = match[3].toLowerCase();
+  if (meridiem === "pm" && hour !== 12) hour += 12;
+  if (meridiem === "am" && hour === 12) hour = 0;
+
+  const startTotalMinutes = hour * 60 + parseInt(minute, 10);
+  const endTotalMinutes = (startTotalMinutes + DEFAULT_DURATION_MINUTES) % (24 * 60);
+
+  const start = `${String(Math.floor(startTotalMinutes / 60)).padStart(2, "0")}${String(startTotalMinutes % 60).padStart(2, "0")}00`;
+  const end = `${String(Math.floor(endTotalMinutes / 60)).padStart(2, "0")}${String(endTotalMinutes % 60).padStart(2, "0")}00`;
+  return { start, end };
+}
 
 function icsDate(dateStr: string, timeStr: string) {
   // dateStr: 'YYYY-MM-DD', timeStr: 'HHMMSS' -> '20260713T080000'
@@ -19,23 +41,23 @@ function escapeIcs(text: string) {
 export function buildMatchIcs({
   matchId,
   matchDate,
-  timeSlot,
+  timeDisplay,
   courtName,
   playerNames,
 }: {
   matchId: string;
   matchDate: string;
-  timeSlot: string;
+  timeDisplay: string;
   courtName: string;
   playerNames: string[];
 }) {
-  const slot = TIME_SLOTS[timeSlot] ?? TIME_SLOTS.morning;
+  const slot = parseStartTime(timeDisplay || "");
   const dtStart = icsDate(matchDate, slot.start);
   const dtEnd = icsDate(matchDate, slot.end);
   const now = new Date().toISOString().replace(/[-:]/g, "").split(".")[0] + "Z";
 
   const summary = escapeIcs(`Tennis Match — ${courtName}`);
-  const description = escapeIcs(`Playing with: ${playerNames.join(", ")}`);
+  const description = escapeIcs(`${timeDisplay || ""}\nPlaying with: ${playerNames.join(", ")}`);
   const location = escapeIcs(courtName);
 
   const ics = [

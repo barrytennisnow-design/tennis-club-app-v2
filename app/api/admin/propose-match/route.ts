@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { createClient, createAdminClient } from "@/lib/supabaseServer";
 import { sendEmail, matchProposedEmail } from "@/lib/email";
-import { buildMatchIcs } from "@/lib/ics";
+import { getDefaultTimeDisplay, resolveTimeDisplay } from "@/lib/timeDisplay";
 
 export async function POST(request: Request) {
   const { match_id } = await request.json();
@@ -48,33 +48,47 @@ export async function POST(request: Request) {
   if (updateError) return NextResponse.json({ error: updateError.message }, { status: 500 });
 
   const siteUrl = process.env.NEXT_PUBLIC_SITE_URL ?? "";
-  
-  // Generate ICS file for the match
-  const playerNames = match.match_players
-    .filter((mp: any) => mp.players)
-    .map((mp: any) => `${mp.players.first_name} ${mp.players.last_name}`);
-  const ics = buildMatchIcs({
-    matchId: match_id,
-    matchDate: match.match_date,
-    timeSlot: match.time_slot,
-    courtName: match.court?.name ?? "Court TBD",
-    playerNames,
-  });
-  const icsBase64 = Buffer.from(ics).toString("base64");
-  
+
+  const defaultTimeDisplay = await getDefaultTimeDisplay(admin);
+  const timeDisplay = resolveTimeDisplay(match, defaultTimeDisplay);
+
+  // No .ics attachment at proposal time -- a match can still fall
+  // through (declined / timed out), so a downloadable calendar file
+  // is only offered once it's actually confirmed (see
+  // respond-match/route.ts and the "Download Calendar Invite" button
+  // on the player's Matches page).
   for (const mp of match.match_players) {
     if (!mp.players) continue;
     const teammates = match.match_players
       .filter((other: any) => other.player_id !== mp.player_id && other.players)
       .map((other: any) => `${other.players.first_name} ${other.players.last_name}`);
 
+    // Conflict check: does this player already have another
+    // proposed/confirmed match on the same date? We have no access to
+    // anyone's personal/external calendar, so this only checks other
+    // matches already tracked in this system -- but it's the same
+    // "can't be in two places at once" conflict that matters here.
+    const { data: sameDayMatches } = await admin
+      .from("match_players")
+      .select("matches!inner(id, match_number, match_date, status)")
+      .eq("player_id", mp.player_id)
+      .eq("matches.match_date", match.match_date)
+      .in("matches.status", ["proposed", "confirmed"])
+      .neq("matches.id", match_id);
+    const conflict = (sameDayMatches ?? [])[0]?.matches as any;
+    const conflictNote = conflict
+      ? `You already have Match M${conflict.match_number} scheduled on this same date.`
+      : null;
+
     const { subject, html } = matchProposedEmail({
+      matchNumber: match.match_number,
       firstName: mp.players.first_name,
       matchDate: match.match_date,
-      timeSlot: match.time_slot,
+      timeSlot: timeDisplay,
       courtName: match.court?.name ?? "Court TBD",
       teammates,
       acceptUrl: `${siteUrl}/matches`,
+      conflictNote,
     });
 
     await sendEmail({
@@ -82,7 +96,6 @@ export async function POST(request: Request) {
       to: mp.players.email,
       subject,
       html,
-      attachments: [{ filename: "match.ics", content: icsBase64 }],
     });
   }
 
