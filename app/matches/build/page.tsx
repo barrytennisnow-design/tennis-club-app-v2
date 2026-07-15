@@ -165,7 +165,7 @@ export default function BuildMatchPage() {
                       : "border-stone-300 hover:bg-stone-50"
                   }`}
                 >
-                  {p.first_name} {p.last_name}{p.ranking ? ` (${p.ranking})` : ""}
+                  {p.first_name} {p.last_name}
                 </button>
               ))}
             </div>

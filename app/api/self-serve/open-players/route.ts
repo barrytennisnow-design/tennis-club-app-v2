@@ -35,15 +35,14 @@ export async function GET(request: Request) {
     return NextResponse.json({ error: "You're already in a match that day" }, { status: 403 });
   }
 
-  // Everyone else active, available that day, and not already tied
-  // up in a match that day. They do NOT need to be opted into
-  // self-serve themselves -- opt-in only controls who can BUILD a
-  // match; anyone active can still be invited into one.
+  // Everyone else opted in, active, available that day, and not
+  // already tied up in a match that day.
   const { data: availRows } = await admin
     .from("availability")
-    .select("player_id, players!inner(id, first_name, last_name, ranking, status)")
+    .select("player_id, players!inner(id, first_name, last_name, self_serve_opt_in, status)")
     .eq("date", date)
     .eq("time_slot", "morning")
+    .eq("players.self_serve_opt_in", true)
     .eq("players.status", "active")
     .neq("player_id", me.id);
 
