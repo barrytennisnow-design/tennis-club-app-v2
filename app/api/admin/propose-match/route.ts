@@ -12,7 +12,7 @@ export async function POST(request: Request) {
   const { data: userData } = await supabase.auth.getUser();
   if (!userData.user) return NextResponse.json({ error: "Not authenticated" }, { status: 401 });
   const { data: me } = await supabase.from("players").select("id, role, permissions").eq("auth_user_id", userData.user.id).single();
-  if (!hasPermission(me, "matrix_propose_match")) return NextResponse.json({ error: "Not authorized" }, { status: 403 });
+  if (!me || !hasPermission(me, "matrix_propose_match")) return NextResponse.json({ error: "Not authorized" }, { status: 403 });
 
   const admin = createAdminClient();
 
