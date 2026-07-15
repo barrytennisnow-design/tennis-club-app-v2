@@ -1,11 +1,12 @@
 import { NextResponse } from "next/server";
 import { createClient, createAdminClient } from "@/lib/supabaseServer";
+import { hasPermission } from "@/lib/permissions";
 
 export async function POST(request: Request) {
   const body = await request.json();
   const { player_id, ranking, decline } = body;
 
-  // Verify the caller is actually a manager before doing anything.
+  // Verify the caller is authorized before doing anything.
   const supabase = createClient();
   const { data: userData } = await supabase.auth.getUser();
   if (!userData.user) {
@@ -13,10 +14,10 @@ export async function POST(request: Request) {
   }
   const { data: me } = await supabase
     .from("players")
-    .select("id, role")
+    .select("id, role, permissions")
     .eq("auth_user_id", userData.user.id)
     .single();
-  if (me?.role !== "manager") {
+  if (!hasPermission(me, "roster_add_player")) {
     return NextResponse.json({ error: "Not authorized" }, { status: 403 });
   }
 

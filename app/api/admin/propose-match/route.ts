@@ -3,6 +3,7 @@ import { createClient, createAdminClient } from "@/lib/supabaseServer";
 import { sendEmail, matchProposedEmail } from "@/lib/email";
 import { getDefaultTimeDisplay, resolveTimeDisplay } from "@/lib/timeDisplay";
 import { checkSameDayConflict } from "@/lib/conflict";
+import { hasPermission } from "@/lib/permissions";
 
 export async function POST(request: Request) {
   const { match_id } = await request.json();
@@ -10,8 +11,8 @@ export async function POST(request: Request) {
   const supabase = createClient();
   const { data: userData } = await supabase.auth.getUser();
   if (!userData.user) return NextResponse.json({ error: "Not authenticated" }, { status: 401 });
-  const { data: me } = await supabase.from("players").select("role").eq("auth_user_id", userData.user.id).single();
-  if (me?.role !== "manager") return NextResponse.json({ error: "Not authorized" }, { status: 403 });
+  const { data: me } = await supabase.from("players").select("role, permissions").eq("auth_user_id", userData.user.id).single();
+  if (!hasPermission(me, "matrix_propose_match")) return NextResponse.json({ error: "Not authorized" }, { status: 403 });
 
   const admin = createAdminClient();
 

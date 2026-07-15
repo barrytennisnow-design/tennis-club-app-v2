@@ -9,6 +9,7 @@
 
 import { NextResponse } from "next/server";
 import { createClient, createAdminClient } from "@/lib/supabaseServer";
+import { hasPermission } from "@/lib/permissions";
 
 export async function POST(request: Request) {
   const { slotA, slotB } = await request.json();
@@ -17,8 +18,8 @@ export async function POST(request: Request) {
   const supabase = createClient();
   const { data: userData } = await supabase.auth.getUser();
   if (!userData.user) return NextResponse.json({ error: "Not authenticated" }, { status: 401 });
-  const { data: me } = await supabase.from("players").select("role").eq("auth_user_id", userData.user.id).single();
-  if (me?.role !== "manager") return NextResponse.json({ error: "Not authorized" }, { status: 403 });
+  const { data: me } = await supabase.from("players").select("role, permissions").eq("auth_user_id", userData.user.id).single();
+  if (!hasPermission(me, "matrix_swap_players")) return NextResponse.json({ error: "Not authorized" }, { status: 403 });
 
   if (!slotA?.playerId || !slotB?.playerId) {
     return NextResponse.json({ error: "Both players are required" }, { status: 400 });

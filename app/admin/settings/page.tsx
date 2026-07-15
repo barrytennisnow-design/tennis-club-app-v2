@@ -2,6 +2,8 @@
 
 import { useEffect, useRef, useState } from "react";
 import { createClient } from "@/lib/supabaseClient";
+import { useMyAccess } from "@/lib/useMyAccess";
+import { hasPermission } from "@/lib/permissions";
 
 // ------------------------------------------------------------
 // Small reusable "Actions" dropdown -- avoids pulling in a menu
@@ -62,6 +64,7 @@ function ActionsMenu({ actions }: { actions: MenuAction[] }) {
 
 export default function SettingsPage() {
   const supabase = createClient();
+  const access = useMyAccess();
   const [courts, setCourts] = useState<any[]>([]);
   const [timeSlots, setTimeSlots] = useState<any[]>([]);
   const [settings, setSettings] = useState<any>(null);
@@ -346,7 +349,11 @@ export default function SettingsPage() {
               Actions menu to control which court gets assigned first.
             </p>
           </div>
-          <button onClick={() => openCourtModal()} className="shrink-0 rounded-md bg-court-green px-3 py-1 text-sm text-white">
+          <button
+            onClick={() => openCourtModal()}
+            disabled={!hasPermission(access, "settings_add_court")}
+            className="shrink-0 rounded-md bg-court-green px-3 py-1 text-sm text-white disabled:opacity-40"
+          >
             + Add Court
           </button>
         </div>
@@ -377,12 +384,12 @@ export default function SettingsPage() {
                   <td className="px-4 py-2">
                     <ActionsMenu
                       actions={[
-                        { label: "Edit", onClick: () => openCourtModal(c) },
-                        { label: "Move up", onClick: () => moveCourt(c, -1), disabled: i === 0 },
-                        { label: "Move down", onClick: () => moveCourt(c, 1), disabled: i === sortedActiveCourts.length - 1 },
-                        { label: c.is_default ? "Default ✓" : "Set as default", onClick: () => setDefaultCourt(c.id), disabled: c.is_default },
-                        { label: "Clone", onClick: () => cloneCourt(c) },
-                        { label: "Delete", onClick: () => deleteCourt(c), danger: true },
+                        { label: "Edit", onClick: () => openCourtModal(c), disabled: !hasPermission(access, "settings_edit_court") },
+                        { label: "Move up", onClick: () => moveCourt(c, -1), disabled: i === 0 || !hasPermission(access, "settings_edit_court") },
+                        { label: "Move down", onClick: () => moveCourt(c, 1), disabled: i === sortedActiveCourts.length - 1 || !hasPermission(access, "settings_edit_court") },
+                        { label: c.is_default ? "Default ✓" : "Set as default", onClick: () => setDefaultCourt(c.id), disabled: c.is_default || !hasPermission(access, "settings_change_default_court") },
+                        { label: "Clone", onClick: () => cloneCourt(c), disabled: !hasPermission(access, "settings_add_court") },
+                        { label: "Delete", onClick: () => deleteCourt(c), danger: true, disabled: !hasPermission(access, "settings_delete_court") },
                       ]}
                     />
                   </td>
@@ -440,7 +447,11 @@ export default function SettingsPage() {
               Actions menu to control display order in dropdowns.
             </p>
           </div>
-          <button onClick={() => openTimeSlotModal()} className="shrink-0 rounded-md bg-court-green px-3 py-1 text-sm text-white">
+          <button
+            onClick={() => openTimeSlotModal()}
+            disabled={!hasPermission(access, "settings_add_time")}
+            className="shrink-0 rounded-md bg-court-green px-3 py-1 text-sm text-white disabled:opacity-40"
+          >
             + Add Time Slot
           </button>
         </div>
@@ -471,12 +482,12 @@ export default function SettingsPage() {
                   <td className="px-4 py-2">
                     <ActionsMenu
                       actions={[
-                        { label: "Edit", onClick: () => openTimeSlotModal(ts) },
-                        { label: "Move up", onClick: () => moveTimeSlot(ts, -1), disabled: i === 0 },
-                        { label: "Move down", onClick: () => moveTimeSlot(ts, 1), disabled: i === sortedActiveTimeSlots.length - 1 },
-                        { label: ts.is_default ? "Default ✓" : "Set as default", onClick: () => setDefaultTimeSlot(ts.id), disabled: ts.is_default },
-                        { label: "Clone", onClick: () => cloneTimeSlot(ts) },
-                        { label: "Delete", onClick: () => deleteTimeSlot(ts), danger: true },
+                        { label: "Edit", onClick: () => openTimeSlotModal(ts), disabled: !hasPermission(access, "settings_edit_time") },
+                        { label: "Move up", onClick: () => moveTimeSlot(ts, -1), disabled: i === 0 || !hasPermission(access, "settings_edit_time") },
+                        { label: "Move down", onClick: () => moveTimeSlot(ts, 1), disabled: i === sortedActiveTimeSlots.length - 1 || !hasPermission(access, "settings_edit_time") },
+                        { label: ts.is_default ? "Default ✓" : "Set as default", onClick: () => setDefaultTimeSlot(ts.id), disabled: ts.is_default || !hasPermission(access, "settings_change_default_time") },
+                        { label: "Clone", onClick: () => cloneTimeSlot(ts), disabled: !hasPermission(access, "settings_add_time") },
+                        { label: "Delete", onClick: () => deleteTimeSlot(ts), danger: true, disabled: !hasPermission(access, "settings_delete_time") },
                       ]}
                     />
                   </td>
@@ -531,7 +542,8 @@ export default function SettingsPage() {
           Default timeout for proposed matches (hours)
           <input
             type="number"
-            className="mt-1 w-full rounded border border-stone-300 px-2 py-1"
+            disabled={access.role !== "manager"}
+            className="mt-1 w-full rounded border border-stone-300 px-2 py-1 disabled:bg-stone-100 disabled:text-stone-400"
             value={settings.default_timeout_hours ?? 24}
             onChange={(e) => setSettings({ ...settings, default_timeout_hours: parseInt(e.target.value) || 24 })}
             min="1"
@@ -550,7 +562,8 @@ export default function SettingsPage() {
           Open self-serve this many days before the match date
           <input
             type="number"
-            className="mt-1 w-full rounded border border-stone-300 px-2 py-1"
+            disabled={!hasPermission(access, "settings_change_self_serve_window")}
+            className="mt-1 w-full rounded border border-stone-300 px-2 py-1 disabled:bg-stone-100 disabled:text-stone-400"
             value={settings.self_serve_window_days ?? 3}
             onChange={(e) => setSettings({ ...settings, self_serve_window_days: parseInt(e.target.value) || 0 })}
             min="0"
@@ -565,7 +578,8 @@ export default function SettingsPage() {
           Send reminder nudge every X hours (after proposal)
           <input
             type="number"
-            className="mt-1 w-full rounded border border-stone-300 px-2 py-1"
+            disabled={access.role !== "manager"}
+            className="mt-1 w-full rounded border border-stone-300 px-2 py-1 disabled:bg-stone-100 disabled:text-stone-400"
             value={settings.nudge_frequency_hours ?? 12}
             onChange={(e) => setSettings({ ...settings, nudge_frequency_hours: parseInt(e.target.value) || 12 })}
             min="1"

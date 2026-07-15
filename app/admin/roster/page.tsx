@@ -3,6 +3,8 @@
 import { useEffect, useState } from "react";
 import { createClient } from "@/lib/supabaseClient";
 import { formatShortDate } from "@/lib/formatDate";
+import { useMyAccess } from "@/lib/useMyAccess";
+import { hasPermission } from "@/lib/permissions";
 
 const RANKING_OPTIONS = ["2.5","2.75","3.0","3.25","3.5","3.75","4.0","4.25","4.5"];
 const STATUS_OPTIONS = ["pending", "active", "paused", "declined"];
@@ -38,6 +40,7 @@ const STORAGE_KEY = "roster_column_order_v1";
 
 export default function RosterPage() {
   const supabase = createClient();
+  const access = useMyAccess();
   const [players, setPlayers] = useState<any[]>([]);
   const [filter, setFilter] = useState<"all" | "active" | "paused" | "pending" | "declined">("active");
   const [busyId, setBusyId] = useState<string | null>(null);
@@ -145,7 +148,8 @@ export default function RosterPage() {
       case "self_serve_opt_in":
         return (
           <select
-            className="rounded border border-stone-300 px-1 py-0.5 text-xs"
+            disabled={!hasPermission(access, "roster_change_self_serve_optin")}
+            className="rounded border border-stone-300 px-1 py-0.5 text-xs disabled:bg-stone-100 disabled:text-stone-400"
             value={p.self_serve_opt_in ? "yes" : "no"}
             onChange={(e) => setSelfServeOptIn(p.id, e.target.value === "yes")}
           >
@@ -156,7 +160,8 @@ export default function RosterPage() {
       case "status":
         return (
           <select
-            className="rounded border border-stone-300 px-1 py-0.5 text-xs"
+            disabled={!hasPermission(access, "roster_change_status")}
+            className="rounded border border-stone-300 px-1 py-0.5 text-xs disabled:bg-stone-100 disabled:text-stone-400"
             value={p.status}
             onChange={(e) => setStatus(p.id, e.target.value)}
           >
@@ -174,7 +179,8 @@ export default function RosterPage() {
         );
         return (
           <select
-            className="rounded border border-stone-300 px-1 py-0.5 text-xs"
+            disabled={!hasPermission(access, "roster_change_ranking")}
+            className="rounded border border-stone-300 px-1 py-0.5 text-xs disabled:bg-stone-100 disabled:text-stone-400"
             value={selectedOption ?? ""}
             onChange={(e) => setRanking(p.id, e.target.value)}
           >
@@ -200,13 +206,15 @@ export default function RosterPage() {
       case "actions":
         return (
           <div className="flex gap-2 whitespace-nowrap">
-            <button disabled={busyId === p.id} onClick={() => sendAccessLink(p.id)}
+            <button disabled={busyId === p.id || !hasPermission(access, "roster_send_link")} onClick={() => sendAccessLink(p.id)}
               className="text-blue-600 underline disabled:opacity-50">
               Send link
             </button>
-            <a href={`/api/admin/impersonate/${p.id}`} className="text-purple-600 underline">
-              Log in as
-            </a>
+            {access.role === "manager" && (
+              <a href={`/api/admin/impersonate/${p.id}`} className="text-purple-600 underline">
+                Log in as
+              </a>
+            )}
           </div>
         );
       default:

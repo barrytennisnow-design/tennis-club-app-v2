@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { createClient, createAdminClient } from "@/lib/supabaseServer";
 import { sendEmail, accessLinkEmail } from "@/lib/email";
+import { hasPermission } from "@/lib/permissions";
 
 export async function POST(request: Request) {
   const { player_id } = await request.json();
@@ -12,10 +13,10 @@ export async function POST(request: Request) {
   }
   const { data: me } = await supabase
     .from("players")
-    .select("role")
+    .select("role, permissions")
     .eq("auth_user_id", userData.user.id)
     .single();
-  if (me?.role !== "manager") {
+  if (!hasPermission(me, "roster_send_link")) {
     return NextResponse.json({ error: "Not authorized" }, { status: 403 });
   }
 

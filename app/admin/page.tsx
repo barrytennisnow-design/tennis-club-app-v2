@@ -3,9 +3,12 @@
 import { useEffect, useState } from "react";
 import { createClient } from "@/lib/supabaseClient";
 import { formatPhone } from "@/lib/formatPhone";
+import { useMyAccess } from "@/lib/useMyAccess";
+import { hasPermission } from "@/lib/permissions";
 
 export default function AdminHome() {
   const supabase = createClient();
+  const access = useMyAccess();
   const [isManager, setIsManager] = useState<boolean | null>(null);
   const [pending, setPending] = useState<any[]>([]);
   const [ratings, setRatings] = useState<Record<string, string>>({});
@@ -89,12 +92,12 @@ export default function AdminHome() {
                     <option key={r} value={r}>{r}</option>
                   ))}
                 </select>
-                <button onClick={() => approve(p.id)}
-                  className="rounded-md bg-court-green px-3 py-1 text-sm text-white">
+                <button onClick={() => approve(p.id)} disabled={!hasPermission(access, "roster_add_player")}
+                  className="rounded-md bg-court-green px-3 py-1 text-sm text-white disabled:opacity-40">
                   Approve
                 </button>
-                <button onClick={() => decline(p.id)}
-                  className="rounded-md border border-stone-300 px-3 py-1 text-sm">
+                <button onClick={() => decline(p.id)} disabled={!hasPermission(access, "roster_add_player")}
+                  className="rounded-md border border-stone-300 px-3 py-1 text-sm disabled:opacity-40">
                   Decline
                 </button>
               </div>

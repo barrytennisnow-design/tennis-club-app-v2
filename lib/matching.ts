@@ -24,6 +24,24 @@ export interface GenerateMatchesParams {
   endDate: string; // 'YYYY-MM-DD'
 }
 
+// Shared by generateMatches (below) and the self-serve match-builder
+// API route -- ANY new match, regardless of who/what creates it,
+// needs the same "next number after the highest visible one" logic.
+// This exact logic has already had two numbering bugs fixed in it
+// (counting stale draft/cancelled rows, and non-chronological
+// assignment order) -- duplicating it elsewhere risks reintroducing
+// either one.
+export async function getNextMatchNumber(supabaseAdmin: any): Promise<number> {
+  const { data: maxMatch } = await supabaseAdmin
+    .from("matches")
+    .select("match_number")
+    .in("status", ["proposed", "confirmed"])
+    .order("match_number", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  return (maxMatch?.match_number ?? 0) + 1;
+}
+
 export async function generateMatches({ supabaseAdmin, startDate, endDate }: GenerateMatchesParams) {
   // Number the new batch starting from the highest match_number that's
   // actually visible on the Matches Tracking page (and to players) --
@@ -32,14 +50,7 @@ export async function generateMatches({ supabaseAdmin, startDate, endDate }: Gen
   // cancelled matches get wiped a few lines below, so neither should
   // ever inflate the next number. If there are no proposed/confirmed
   // matches at all, numbering restarts at M1.
-  const { data: maxMatch } = await supabaseAdmin
-    .from("matches")
-    .select("match_number")
-    .in("status", ["proposed", "confirmed"])
-    .order("match_number", { ascending: false })
-    .limit(1)
-    .maybeSingle();
-  let nextMatchNumber = (maxMatch?.match_number ?? 0) + 1;
+  let nextMatchNumber = await getNextMatchNumber(supabaseAdmin);
 
   // Wipe existing DRAFT matches so this run starts clean, AND clean
   // out CANCELLED matches too -- their players are already free to

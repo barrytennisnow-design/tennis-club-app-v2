@@ -4,6 +4,8 @@ import { useEffect, useState } from "react";
 import { createClient } from "@/lib/supabaseClient";
 import { formatPhone } from "@/lib/formatPhone";
 import { formatShortDateWithWeekday } from "@/lib/formatDate";
+import { useMyAccess } from "@/lib/useMyAccess";
+import { hasPermission } from "@/lib/permissions";
 
 function isoDaysFromNow(n: number) {
   const d = new Date();
@@ -43,6 +45,7 @@ const UNASSIGNED_COLOR = "bg-[#F8F9FA]";
 
 export default function MatchMatrixPage() {
   const supabase = createClient();
+  const access = useMyAccess();
   const [players, setPlayers] = useState<any[]>([]);
   const [matches, setMatches] = useState<any[]>([]);
   const [courts, setCourts] = useState<any[]>([]);
@@ -414,7 +417,7 @@ export default function MatchMatrixPage() {
         <span className="text-stone-400">to</span>
         <input type="date" value={endDate} onChange={(e) => setEndDate(e.target.value)}
           className="rounded border border-stone-300 px-1.5 py-0.5 text-xs" />
-        <button onClick={handleGenerate} disabled={generating}
+        <button onClick={handleGenerate} disabled={generating || !hasPermission(access, "matrix_generate")}
           className="rounded-md bg-court-green px-3 py-1 text-xs text-white disabled:opacity-50">
           {generating ? "Generating..." : "Generate Match Matrix"}
         </button>
@@ -430,7 +433,8 @@ export default function MatchMatrixPage() {
       <div className="flex flex-wrap items-center gap-2">
         <button
           onClick={() => { setSwapMode(!swapMode); setSwapSlots([]); setSelected(null); }}
-          className={`rounded-md px-3 py-1 text-xs font-medium ${swapMode ? "bg-purple-600 text-white" : "border border-purple-400 text-purple-700"}`}
+          disabled={!hasPermission(access, "matrix_swap_players")}
+          className={`rounded-md px-3 py-1 text-xs font-medium disabled:opacity-40 ${swapMode ? "bg-purple-600 text-white" : "border border-purple-400 text-purple-700"}`}
         >
           {swapMode ? "Swap mode ON" : "Swap two players"}
         </button>
@@ -530,7 +534,8 @@ export default function MatchMatrixPage() {
                             <div className="text-xs font-semibold">M{m.match_number}</div>
                             {m.status === "draft" ? (
                               <select
-                                className="w-full rounded border border-stone-300 px-1 py-0.5 text-xs"
+                                disabled={!hasPermission(access, "matrix_change_court")}
+                                className="w-full rounded border border-stone-300 px-1 py-0.5 text-xs disabled:bg-stone-100"
                                 defaultValue={m.court?.id ?? ""}
                                 onChange={(e) => handleInlineCourtChange(m.id, e.target.value)}
                               >
@@ -542,7 +547,8 @@ export default function MatchMatrixPage() {
                             )}
                             {m.status === "draft" ? (
                               <select
-                                className="w-full rounded border border-stone-300 px-1 py-0.5 text-xs mt-1"
+                                disabled={!hasPermission(access, "matrix_change_time")}
+                                className="w-full rounded border border-stone-300 px-1 py-0.5 text-xs mt-1 disabled:bg-stone-100"
                                 defaultValue={
                                   !m.time_display
                                     ? "__default__"
@@ -564,14 +570,16 @@ export default function MatchMatrixPage() {
                             {m.status === "draft" ? (
                               <button
                                 onClick={() => handleInlinePropose(m.id)}
-                                className="mt-1 w-full rounded bg-court-green px-2 py-0.5 text-xs text-white"
+                                disabled={!hasPermission(access, "matrix_propose_match")}
+                                className="mt-1 w-full rounded bg-court-green px-2 py-0.5 text-xs text-white disabled:opacity-40"
                               >
                                 PROPOSE
                               </button>
                             ) : (
                               <button
                                 onClick={() => handleInlineCancel(m.id)}
-                                className="mt-1 w-full rounded border border-red-300 px-2 py-0.5 text-xs text-red-700"
+                                disabled={!hasPermission(access, "matrix_cancel_match")}
+                                className="mt-1 w-full rounded border border-red-300 px-2 py-0.5 text-xs text-red-700 disabled:opacity-40"
                               >
                                 CANCEL
                               </button>
@@ -598,7 +606,8 @@ export default function MatchMatrixPage() {
 
           {selectedMatch.status === "draft" ? (
             <select
-              className="w-full rounded border border-stone-300 px-1 py-0.5 text-sm"
+              disabled={!hasPermission(access, "matrix_change_court")}
+              className="w-full rounded border border-stone-300 px-1 py-0.5 text-sm disabled:bg-stone-100"
               defaultValue={selectedMatch.court?.id ?? ""}
               onChange={(e) => handleAssignCourt(e.target.value)}
             >
@@ -612,7 +621,8 @@ export default function MatchMatrixPage() {
           {selectedMatch.status === "draft" ? (
             <div key={selectedMatch.id}>
               <select
-                className="w-full rounded border border-stone-300 px-1 py-0.5 text-sm"
+                disabled={!hasPermission(access, "matrix_change_time")}
+                className="w-full rounded border border-stone-300 px-1 py-0.5 text-sm disabled:bg-stone-100"
                 defaultValue={
                   !selectedMatch.time_display
                     ? "__default__"
@@ -631,7 +641,8 @@ export default function MatchMatrixPage() {
               </select>
               {(timeChoice === "__custom__" || (!timeSlotDescriptions.includes(selectedMatch.time_display) && selectedMatch.time_display)) && (
                 <input
-                  className="mt-1 w-full rounded border border-stone-300 px-1 py-0.5 text-sm"
+                  disabled={!hasPermission(access, "matrix_change_time")}
+                  className="mt-1 w-full rounded border border-stone-300 px-1 py-0.5 text-sm disabled:bg-stone-100"
                   defaultValue={selectedMatch.time_display || ""}
                   placeholder="e.g. 6:30am warmup, 6:45am start play"
                   onChange={(e) => setCustomTime(e.target.value)}
@@ -653,11 +664,13 @@ export default function MatchMatrixPage() {
           <p className="font-semibold">STATUS: {selectedMatch.status.toUpperCase()}</p>
 
           {selectedMatch.status === "draft" ? (
-            <button onClick={handlePropose} className="w-full rounded bg-court-green px-2 py-1 text-white">
+            <button onClick={handlePropose} disabled={!hasPermission(access, "matrix_propose_match")}
+              className="w-full rounded bg-court-green px-2 py-1 text-white disabled:opacity-40">
               Propose
             </button>
           ) : (
-            <button onClick={handleCancel} className="w-full rounded border border-red-300 px-2 py-1 text-red-700">
+            <button onClick={handleCancel} disabled={!hasPermission(access, "matrix_cancel_match")}
+              className="w-full rounded border border-red-300 px-2 py-1 text-red-700 disabled:opacity-40">
               Cancel match
             </button>
           )}

@@ -3,9 +3,12 @@
 import { useEffect, useState } from "react";
 import { createClient } from "@/lib/supabaseClient";
 import { formatShortDate } from "@/lib/formatDate";
+import { useMyAccess } from "@/lib/useMyAccess";
+import { hasPermission } from "@/lib/permissions";
 
 export default function AdminMatchesPage() {
   const supabase = createClient();
+  const access = useMyAccess();
   const [matches, setMatches] = useState<any[]>([]);
 
   async function load() {
@@ -106,7 +109,7 @@ export default function AdminMatchesPage() {
                   <td className="p-2">{m.confirmed_at ? new Date(m.confirmed_at).toLocaleString() : "—"}</td>
                   <td className="p-2">{m.cancelled_at ? new Date(m.cancelled_at).toLocaleString() : "—"}</td>
                   <td className="p-2">
-                    {m.status === "proposed" ? (
+                    {m.status === "proposed" && hasPermission(access, "matches_change_timeout") ? (
                       <input
                         type="number"
                         className="w-16 rounded border border-stone-300 px-1 py-0.5 text-xs"
@@ -119,7 +122,7 @@ export default function AdminMatchesPage() {
                     )}
                   </td>
                   <td className="p-2">
-                    {m.status === "proposed" ? (
+                    {m.status === "proposed" && hasPermission(access, "matches_change_nudge_count") ? (
                       <input
                         type="number"
                         className="w-16 rounded border border-stone-300 px-1 py-0.5 text-xs"
