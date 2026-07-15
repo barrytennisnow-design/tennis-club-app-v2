@@ -14,6 +14,7 @@ const ALL_COLUMNS: { key: string; label: string }[] = [
   { key: "last_name", label: "Last" },
   { key: "matches_played", label: "Matches Played" },
   { key: "matches_declined", label: "Matches Declined" },
+  { key: "self_serve_opt_in", label: "Self-Serve" },
   { key: "status", label: "Status" },
   { key: "ranking", label: "Rating" },
   { key: "email", label: "Email" },
@@ -111,6 +112,11 @@ export default function RosterPage() {
     load();
   }
 
+  async function setSelfServeOptIn(id: string, optIn: boolean) {
+    await supabase.from("players").update({ self_serve_opt_in: optIn }).eq("id", id);
+    load();
+  }
+
   async function sendAccessLink(id: string) {
     setBusyId(id);
     setMessage(null);
@@ -136,6 +142,17 @@ export default function RosterPage() {
         return matchStats[p.id]?.played ?? 0;
       case "matches_declined":
         return matchStats[p.id]?.declined ?? 0;
+      case "self_serve_opt_in":
+        return (
+          <select
+            className="rounded border border-stone-300 px-1 py-0.5 text-xs"
+            value={p.self_serve_opt_in ? "yes" : "no"}
+            onChange={(e) => setSelfServeOptIn(p.id, e.target.value === "yes")}
+          >
+            <option value="no">No</option>
+            <option value="yes">Yes</option>
+          </select>
+        );
       case "status":
         return (
           <select

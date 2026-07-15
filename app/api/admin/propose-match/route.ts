@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { createClient, createAdminClient } from "@/lib/supabaseServer";
 import { sendEmail, matchProposedEmail } from "@/lib/email";
 import { getDefaultTimeDisplay, resolveTimeDisplay } from "@/lib/timeDisplay";
+import { checkSameDayConflict } from "@/lib/conflict";
 
 export async function POST(request: Request) {
   const { match_id } = await request.json();
@@ -78,17 +79,7 @@ export async function POST(request: Request) {
     // anyone's personal/external calendar, so this only checks other
     // matches already tracked in this system -- but it's the same
     // "can't be in two places at once" conflict that matters here.
-    const { data: sameDayMatches } = await admin
-      .from("match_players")
-      .select("matches!inner(id, match_number, match_date, status)")
-      .eq("player_id", mp.player_id)
-      .eq("matches.match_date", match.match_date)
-      .in("matches.status", ["proposed", "confirmed"])
-      .neq("matches.id", match_id);
-    const conflict = (sameDayMatches ?? [])[0]?.matches as any;
-    const conflictNote = conflict
-      ? `You already have Match M${conflict.match_number} scheduled on this same date.`
-      : null;
+    const conflictNote = await checkSameDayConflict(admin, mp.player_id, match.match_date, match_id);
 
     const { subject, html } = matchProposedEmail({
       matchNumber: match.match_number,

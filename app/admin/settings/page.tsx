@@ -113,6 +113,7 @@ export default function SettingsPage() {
       .update({
         default_timeout_hours: settings.default_timeout_hours || 24,
         nudge_frequency_hours: settings.nudge_frequency_hours || 12,
+        self_serve_window_days: settings.self_serve_window_days ?? 3,
       })
       .eq("id", true);
     setSaving(false);
@@ -534,6 +535,25 @@ export default function SettingsPage() {
             value={settings.default_timeout_hours ?? 24}
             onChange={(e) => setSettings({ ...settings, default_timeout_hours: parseInt(e.target.value) || 24 })}
             min="1"
+          />
+        </label>
+      </div>
+
+      {/* Self-Serve Matches */}
+      <div className="space-y-4">
+        <h2 className="text-lg font-semibold">Self-Serve Matches</h2>
+        <p className="text-xs text-stone-500">
+          How close to a date opted-in players can build and propose their own match for a day they're
+          available but not yet assigned. Players are opted in individually on the Roster page.
+        </p>
+        <label className="block text-sm font-medium">
+          Open self-serve this many days before the match date
+          <input
+            type="number"
+            className="mt-1 w-full rounded border border-stone-300 px-2 py-1"
+            value={settings.self_serve_window_days ?? 3}
+            onChange={(e) => setSettings({ ...settings, self_serve_window_days: parseInt(e.target.value) || 0 })}
+            min="0"
           />
         </label>
       </div>
