@@ -59,7 +59,7 @@ export async function POST(request: Request) {
 
   const { data: availRows } = await admin
     .from("availability")
-    .select("player_id, players!inner(id, first_name, last_name, email, self_serve_opt_in, status)")
+    .select("player_id, players!inner(id, first_name, last_name, email, status)")
     .eq("date", date)
     .eq("time_slot", "morning")
     .in("player_id", allPlayerIds);
@@ -68,9 +68,9 @@ export async function POST(request: Request) {
   if (notAvailable.length > 0) {
     return NextResponse.json({ error: "Everyone in the match needs to be marked available that day" }, { status: 400 });
   }
-  const notOptedIn = (availRows ?? []).filter((r: any) => !r.players.self_serve_opt_in || r.players.status !== "active");
-  if (notOptedIn.length > 0) {
-    return NextResponse.json({ error: "One of the players you picked is no longer open to self-serve matches" }, { status: 409 });
+  const notActive = (availRows ?? []).filter((r: any) => r.players.status !== "active");
+  if (notActive.length > 0) {
+    return NextResponse.json({ error: "One of the players you picked is no longer active" }, { status: 409 });
   }
 
   const { data: court } = await admin.from("courts").select("id, name").eq("id", court_id).eq("is_active", true).maybeSingle();

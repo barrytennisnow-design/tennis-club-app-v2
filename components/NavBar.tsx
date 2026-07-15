@@ -10,6 +10,7 @@ export default function NavBar() {
   const pathname = usePathname();
   const [isManager, setIsManager] = useState(false);
   const [isCaptain, setIsCaptain] = useState(false);
+  const [selfServeOptIn, setSelfServeOptIn] = useState(false);
   const [loggedIn, setLoggedIn] = useState(false);
 
   useEffect(() => {
@@ -19,11 +20,12 @@ export default function NavBar() {
       setLoggedIn(true);
       const { data: me } = await supabase
         .from("players")
-        .select("role")
+        .select("role, self_serve_opt_in")
         .eq("auth_user_id", userData.user.id)
         .maybeSingle();
       if (me?.role === "manager") setIsManager(true);
       if (me?.role === "captain") setIsCaptain(true);
+      if (me?.self_serve_opt_in) setSelfServeOptIn(true);
     })();
   }, []);
 
@@ -49,7 +51,7 @@ export default function NavBar() {
         </Link>
         <nav className="flex flex-wrap items-center gap-x-4 gap-y-1 text-sm">
           <Link href="/matches" className={linkClass("/matches")}>My Matches</Link>
-          <Link href="/matches/build" className={linkClass("/matches/build")}>Build a Match</Link>
+          {selfServeOptIn && <Link href="/matches/build" className={linkClass("/matches/build")}>Build a Match</Link>}
           <Link href="/availability" className={linkClass("/availability")}>Availability</Link>
           <Link href="/profile" className={linkClass("/profile")}>Profile</Link>
           {!loggedIn && <Link href="/login" className={linkClass("/login")}>Log in</Link>}
