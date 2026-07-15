@@ -96,6 +96,7 @@ export async function POST(request: Request) {
       auto_cancel_hours: autoCancelHours,
       nudge_count: 0,
       created_by: me.id,
+      proposed_by: me.id,
     })
     .select()
     .single();

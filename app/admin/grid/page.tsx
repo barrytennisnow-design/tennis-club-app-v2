@@ -86,7 +86,7 @@ export default function MatchMatrixPage() {
 
     const { data: matchRows, error: matchError } = await supabase
       .from("matches")
-      .select("id, match_number, match_date, time_slot, time_display, status, court:courts(id, name), match_players(id, player_id, response_status, players(id, first_name, last_name))")
+      .select("id, match_number, match_date, time_slot, time_display, status, court:courts(id, name), proposed_by, proposer:players!proposed_by(first_name, last_name), match_players(id, player_id, response_status, players(id, first_name, last_name))")
       .gte("match_date", days[0])
       .lte("match_date", days[days.length - 1])
       .neq("status", "cancelled");
@@ -531,7 +531,12 @@ export default function MatchMatrixPage() {
                         const color = MATCH_PALETTE[m.match_number % MATCH_PALETTE.length];
                         return (
                           <div key={m.id} className={`rounded p-1 ${color}`}>
-                            <div className="text-xs font-semibold">M{m.match_number}</div>
+                            <div className="text-xs font-semibold">
+                              M{m.match_number}
+                              {m.proposer && (
+                                <span className="font-normal text-stone-500"> — {m.proposer.first_name} {m.proposer.last_name}</span>
+                              )}
+                            </div>
                             {m.status === "draft" ? (
                               <select
                                 disabled={!hasPermission(access, "matrix_change_court")}
@@ -602,7 +607,12 @@ export default function MatchMatrixPage() {
 
       {selectedMatch && selectedPlayer && (
         <div className="w-72 space-y-1 rounded-md border bg-stone-50 p-3 text-sm">
-          <p className="font-bold">M{selectedMatch.match_number}</p>
+          <p className="font-bold">
+            M{selectedMatch.match_number}
+            {selectedMatch.proposer && (
+              <span className="font-normal text-stone-500"> — {selectedMatch.proposer.first_name} {selectedMatch.proposer.last_name}</span>
+            )}
+          </p>
 
           {selectedMatch.status === "draft" ? (
             <select

@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { createClient } from "@/lib/supabaseClient";
-import { formatShortDate } from "@/lib/formatDate";
+import { formatShortDateWithWeekday } from "@/lib/formatDate";
 import { useMyAccess } from "@/lib/useMyAccess";
 import { hasPermission } from "@/lib/permissions";
 
@@ -14,9 +14,9 @@ export default function AdminMatchesPage() {
   async function load() {
     const { data } = await supabase
       .from("matches")
-      .select("*, court:courts(id, name), match_players(id, response_status, decline_reason, player_id, players(id, first_name, last_name))")
+      .select("*, court:courts(id, name), proposer:players!proposed_by(first_name, last_name), match_players(id, response_status, decline_reason, player_id, players(id, first_name, last_name))")
       .not("status", "eq", "draft")
-      .order("match_date", { ascending: false });
+      .order("proposed_at", { ascending: false });
     setMatches(data ?? []);
   }
 
@@ -57,6 +57,7 @@ export default function AdminMatchesPage() {
           <thead className="bg-stone-100 text-left text-stone-600">
             <tr>
               <th className="p-2">Match</th>
+              <th className="p-2">Proposed By</th>
               <th className="p-2">Day</th>
               <th className="p-2">Time</th>
               <th className="p-2">Court</th>
@@ -83,7 +84,8 @@ export default function AdminMatchesPage() {
               return (
                 <tr key={m.id} className={`border-t ${rowColor}`}>
                   <td className="p-2 font-mono">M{m.match_number}</td>
-                  <td className="p-2">{formatShortDate(m.match_date)}</td>
+                  <td className="p-2">{m.proposer ? `${m.proposer.first_name} ${m.proposer.last_name}` : "Manager"}</td>
+                  <td className="p-2">{formatShortDateWithWeekday(m.match_date)}</td>
                   <td className="p-2">{m.time_display || m.time_slot}</td>
                   <td className="p-2">{m.court?.name ?? "TBD"}</td>
                   {players.map((mp: any, i: number) => (
@@ -138,7 +140,7 @@ export default function AdminMatchesPage() {
               );
             })}
             {matches.length === 0 && (
-              <tr><td colSpan={14} className="p-4 text-center text-stone-400">No matches yet.</td></tr>
+              <tr><td colSpan={15} className="p-4 text-center text-stone-400">No matches yet.</td></tr>
             )}
           </tbody>
         </table>
