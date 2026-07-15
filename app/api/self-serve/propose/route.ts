@@ -113,7 +113,7 @@ export async function POST(request: Request) {
     ...player_ids.map((pid: string) => ({ match_id: newMatch.id, player_id: pid, response_status: "proposed" })),
   ]);
 
-  const namesById = new Map((availRows ?? []).map((r: any) => [r.player_id, `${r.players.first_name} ${r.players.last_name}`]));
+  const namesById = new Map<string, string>((availRows ?? []).map((r: any) => [r.player_id, `${r.players.first_name} ${r.players.last_name}`]));
   const siteUrl = process.env.NEXT_PUBLIC_SITE_URL ?? "";
 
   for (const pid of player_ids) {
