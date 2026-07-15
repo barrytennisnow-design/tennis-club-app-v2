@@ -17,7 +17,7 @@ export async function POST(request: Request) {
     .select("id, role, permissions")
     .eq("auth_user_id", userData.user.id)
     .single();
-  if (!hasPermission(me, "roster_add_player")) {
+  if (!me || !hasPermission(me, "roster_add_player")) {
     return NextResponse.json({ error: "Not authorized" }, { status: 403 });
   }
 

@@ -25,7 +25,7 @@ export async function GET(request: Request, { params }: { params: { player_id: s
     .eq("auth_user_id", userData.user.id)
     .single();
 
-  if (me?.role !== "manager") {
+  if (!me || me.role !== "manager") {
     return NextResponse.redirect(`${origin}/?error=not_authorized`);
   }
 

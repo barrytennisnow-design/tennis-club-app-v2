@@ -23,7 +23,7 @@ export async function POST(request: Request) {
     .select("role, email")
     .eq("auth_user_id", userData.user.id)
     .single();
-  if (me?.role !== "manager") {
+  if (!me || me.role !== "manager") {
     return NextResponse.json({ error: "Not authorized" }, { status: 403 });
   }
 
