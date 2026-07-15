@@ -331,15 +331,29 @@ create policy "captains view availability within display cap"
     )
   );
 
+-- Bypasses RLS the same way is_manager()/has_permission() do, so
+-- looking up a match's date from within a match_players policy
+-- doesn't re-trigger the matches table's own SELECT policies (one
+-- of which subqueries match_players) -- that direct cycle caused
+-- "infinite recursion detected in policy for relation match_players".
+create or replace function match_date_for(match_id_arg uuid)
+returns date
+language sql
+security definer
+stable
+as $$
+  select match_date from matches where id = match_id_arg;
+$$;
+
+drop policy if exists "captains view match_players within display cap" on match_players;
 create policy "captains view match_players within display cap"
   on match_players for select
   using (
     exists (
       select 1 from players p
-      join matches m on m.id = match_players.match_id
       where p.auth_user_id = auth.uid()
         and p.role = 'captain'
-        and m.match_date <= (current_date + coalesce((p.permissions->>'matrix_display_days_ahead')::int, 0))
+        and match_date_for(match_players.match_id) <= (current_date + coalesce((p.permissions->>'matrix_display_days_ahead')::int, 0))
     )
   );
 
