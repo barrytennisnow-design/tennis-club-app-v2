@@ -37,6 +37,6 @@ export async function GET() {
     .in("matches.match_date", candidateDates);
   const assignedDates = new Set((assignedRows ?? []).map((r: any) => r.matches.match_date));
 
-  const dates = candidateDates.filter((d) => !assignedDates.has(d)).sort();
+  const dates = candidateDates.filter((d: string) => !assignedDates.has(d)).sort();
   return NextResponse.json({ optedIn: true, dates });
 }
