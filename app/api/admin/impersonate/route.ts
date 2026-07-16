@@ -62,6 +62,7 @@ export async function POST(request: Request) {
   // without needing another email round-trip.
   cookies().set(IMPERSONATOR_COOKIE, me.email, {
     httpOnly: true,
+    secure: process.env.NODE_ENV === "production",
     sameSite: "lax",
     path: "/",
     maxAge: 60 * 60 * 4, // 4 hours
