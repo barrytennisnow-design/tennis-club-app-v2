@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { createClient } from "@/lib/supabaseClient";
-import { formatShortDateWithWeekday } from "@/lib/formatDate";
+import { formatShortDate, formatShortDateWithWeekday } from "@/lib/formatDate";
 import { useMyAccess } from "@/lib/useMyAccess";
 import { hasPermission } from "@/lib/permissions";
 
@@ -85,7 +85,10 @@ export default function AdminMatchesPage() {
                 <tr key={m.id} className={`border-t ${rowColor}`}>
                   <td className="p-2 font-mono">M{m.match_number}</td>
                   <td className="p-2">{m.proposer ? `${m.proposer.first_name} ${m.proposer.last_name}` : "Manager"}</td>
-                  <td className="p-2">{formatShortDateWithWeekday(m.match_date)}</td>
+                  <td className="p-2 whitespace-nowrap leading-tight">
+                    <div>{formatShortDateWithWeekday(m.match_date).split(" ")[0]}</div>
+                    <div>{formatShortDate(m.match_date)}</div>
+                  </td>
                   <td className="p-2">{m.time_display || m.time_slot}</td>
                   <td className="p-2">{m.court?.name ?? "TBD"}</td>
                   {players.map((mp: any, i: number) => (
