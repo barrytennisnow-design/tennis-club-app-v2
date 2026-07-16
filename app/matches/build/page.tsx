@@ -70,7 +70,7 @@ export default function BuildMatchPage() {
   }
 
   async function submit() {
-    if (!selectedDate || selectedPlayerIds.length !== 3 || !courtId) return;
+    if (!selectedDate || selectedPlayerIds.length < 1 || selectedPlayerIds.length > 5 || !courtId) return;
     setSubmitting(true);
     setError(null);
     const time_display = timeChoice === "__default__" ? null : timeChoice;
