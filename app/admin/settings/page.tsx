@@ -70,6 +70,7 @@ export default function SettingsPage() {
   const [settings, setSettings] = useState<any>(null);
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
+  const [saveError, setSaveError] = useState<string | null>(null);
   const [showRetiredCourts, setShowRetiredCourts] = useState(false);
   const [showRetiredTimeSlots, setShowRetiredTimeSlots] = useState(false);
 
@@ -111,7 +112,8 @@ export default function SettingsPage() {
   async function save() {
     setSaving(true);
     setSaved(false);
-    await supabase
+    setSaveError(null);
+    const { error } = await supabase
       .from("club_settings")
       .update({
         default_timeout_hours: settings.default_timeout_hours || 24,
@@ -123,7 +125,11 @@ export default function SettingsPage() {
       })
       .eq("id", true);
     setSaving(false);
-    setSaved(true);
+    if (error) {
+      setSaveError(error.message);
+    } else {
+      setSaved(true);
+    }
   }
 
   // --------------------------------------------------------
@@ -648,6 +654,7 @@ export default function SettingsPage() {
         {saving ? "Saving..." : "Save settings"}
       </button>
       {saved && <p className="text-sm text-green-700">Saved!</p>}
+      {saveError && <p className="text-sm text-red-700">Couldn't save: {saveError}</p>}
 
       {/* Court Modal */}
       {showCourtModal && (
