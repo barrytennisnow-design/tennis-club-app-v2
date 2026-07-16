@@ -37,6 +37,7 @@ create or replace function has_permission(perm_key text)
 returns boolean
 language sql
 security definer
+set search_path = public, pg_temp
 stable
 as $$
   select is_manager() or exists (
@@ -55,6 +56,7 @@ $$;
 -- reaches the row; the trigger below then reverts anything they
 -- specifically aren't allowed to touch.
 drop policy if exists "managers can update any player" on players;
+drop policy if exists "managers and permitted captains can update any player" on players;
 create policy "managers and permitted captains can update any player"
   on players for update
   using (
@@ -122,9 +124,11 @@ create trigger trg_enforce_captain_player_permissions
 -- ------------------------------------------------------------
 
 drop policy if exists "managers manage courts" on courts;
+drop policy if exists "insert courts" on courts;
 create policy "insert courts"
   on courts for insert
   with check (has_permission('settings_add_court'));
+drop policy if exists "update courts" on courts;
 create policy "update courts"
   on courts for update
   using (
@@ -133,6 +137,7 @@ create policy "update courts"
     or has_permission('settings_delete_court')
     or has_permission('settings_change_default_court')
   );
+drop policy if exists "delete courts" on courts;
 create policy "delete courts"
   on courts for delete
   using (is_manager()); -- the app only ever soft-deletes (is_active=false); hard delete stays manager-only
@@ -172,9 +177,11 @@ create trigger trg_enforce_court_update_permissions
 -- ------------------------------------------------------------
 
 drop policy if exists "managers manage time slots" on time_slots;
+drop policy if exists "insert time slots" on time_slots;
 create policy "insert time slots"
   on time_slots for insert
   with check (has_permission('settings_add_time'));
+drop policy if exists "update time slots" on time_slots;
 create policy "update time slots"
   on time_slots for update
   using (
@@ -183,6 +190,7 @@ create policy "update time slots"
     or has_permission('settings_delete_time')
     or has_permission('settings_change_default_time')
   );
+drop policy if exists "delete time slots" on time_slots;
 create policy "delete time slots"
   on time_slots for delete
   using (is_manager());
@@ -223,6 +231,7 @@ create trigger trg_enforce_time_slot_update_permissions
 -- ------------------------------------------------------------
 
 drop policy if exists "managers can update settings" on club_settings;
+drop policy if exists "managers and permitted captains can update settings" on club_settings;
 create policy "managers and permitted captains can update settings"
   on club_settings for update
   using (is_manager() or has_permission('settings_change_self_serve_window'));
@@ -264,6 +273,7 @@ drop policy if exists "managers manage all matches" on matches;
 create policy "managers manage all matches"
   on matches for all
   using (is_manager());
+drop policy if exists "permitted captains update match tracking fields" on matches;
 create policy "permitted captains update match tracking fields"
   on matches for update
   using (has_permission('matches_change_timeout') or has_permission('matches_change_nudge_count'));
@@ -309,6 +319,7 @@ create trigger trg_enforce_match_tracking_permissions
 -- see (all existing select policies stay exactly as they were).
 -- ------------------------------------------------------------
 
+drop policy if exists "captains view matches within display cap" on matches;
 create policy "captains view matches within display cap"
   on matches for select
   using (
@@ -320,6 +331,7 @@ create policy "captains view matches within display cap"
     )
   );
 
+drop policy if exists "captains view availability within display cap" on availability;
 create policy "captains view availability within display cap"
   on availability for select
   using (
@@ -340,6 +352,7 @@ create or replace function match_date_for(match_id_arg uuid)
 returns date
 language sql
 security definer
+set search_path = public, pg_temp
 stable
 as $$
   select match_date from matches
@@ -374,6 +387,7 @@ create policy "captains view match_players within display cap"
 -- email_log
 -- ------------------------------------------------------------
 
+drop policy if exists "permitted captains view email log" on email_log;
 create policy "permitted captains view email log"
   on email_log for select
   using (has_permission('roster_view_email_log'));

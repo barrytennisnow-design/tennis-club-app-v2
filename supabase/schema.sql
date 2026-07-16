@@ -179,6 +179,7 @@ create or replace function is_manager()
 returns boolean
 language sql
 security definer
+set search_path = public, pg_temp
 stable
 as $$
   select exists (

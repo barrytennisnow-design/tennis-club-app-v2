@@ -13,6 +13,7 @@ create or replace function match_date_for(match_id_arg uuid)
 returns date
 language sql
 security definer
+set search_path = public, pg_temp
 stable
 as $$
   select match_date from matches
