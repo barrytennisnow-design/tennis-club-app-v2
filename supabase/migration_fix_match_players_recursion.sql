@@ -18,13 +18,39 @@
 -- everything here is create-or-replace / drop-if-exists.
 -- ============================================================
 
+-- SECURITY DEFINER means this runs with the function owner's
+-- privileges, which bypasses RLS entirely for every query inside
+-- it -- that's what breaks the recursion cycle with match_players'
+-- own policies. But it also means this function had NO access
+-- control of its own: as originally written, anyone (including a
+-- logged-out anon caller) could call
+-- /rest/v1/rpc/match_date_for with any match_id and get its date,
+-- bypassing the matches table's RLS entirely. This adds an actual
+-- check: only managers, captains, or someone actually in the match
+-- get a result back. Since the whole function body still runs
+-- with bypassrls, this internal check does NOT re-trigger
+-- match_players' or matches' RLS policies either -- no recursion
+-- risk from adding it.
 create or replace function match_date_for(match_id_arg uuid)
 returns date
 language sql
 security definer
 stable
 as $$
-  select match_date from matches where id = match_id_arg;
+  select match_date from matches
+  where id = match_id_arg
+    and (
+      is_manager()
+      or exists (
+        select 1 from players p
+        where p.auth_user_id = auth.uid() and p.role = 'captain'
+      )
+      or exists (
+        select 1 from match_players mp
+        join players pl on pl.id = mp.player_id
+        where mp.match_id = match_id_arg and pl.auth_user_id = auth.uid()
+      )
+    );
 $$;
 
 drop policy if exists "captains view match_players within display cap" on match_players;

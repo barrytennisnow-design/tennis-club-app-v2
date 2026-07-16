@@ -342,7 +342,20 @@ language sql
 security definer
 stable
 as $$
-  select match_date from matches where id = match_id_arg;
+  select match_date from matches
+  where id = match_id_arg
+    and (
+      is_manager()
+      or exists (
+        select 1 from players p
+        where p.auth_user_id = auth.uid() and p.role = 'captain'
+      )
+      or exists (
+        select 1 from match_players mp
+        join players pl on pl.id = mp.player_id
+        where mp.match_id = match_id_arg and pl.auth_user_id = auth.uid()
+      )
+    );
 $$;
 
 drop policy if exists "captains view match_players within display cap" on match_players;
