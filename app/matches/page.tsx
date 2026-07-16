@@ -49,12 +49,12 @@ export default function MyMatchesPage() {
         .from("match_players")
         .select("id, response_status, decline_reason, match_id, matches!inner(id, match_number, match_date, time_slot, time_display, status, proposed_at, confirmed_at, cancelled_at, auto_cancel_hours, nudge_count, court:courts(name))")
         .eq("player_id", p.id);
-      const nonDraftMatches = (mp ?? []).filter((row: any) => row.matches?.status !== "draft");
-      // Most recent / soonest first, matching the old system's list
-      nonDraftMatches.sort((a: any, b: any) => a.matches.match_date.localeCompare(b.matches.match_date));
-      setMyMatches(nonDraftMatches);
+      const visibleMatches = (mp ?? []).filter((row: any) => row.matches?.status !== "draft" && row.matches?.status !== "cancelled");
+      // Newest match date first, oldest at the bottom.
+      visibleMatches.sort((a: any, b: any) => b.matches.match_date.localeCompare(a.matches.match_date));
+      setMyMatches(visibleMatches);
 
-      const matchIds = nonDraftMatches.map((row: any) => row.match_id);
+      const matchIds = visibleMatches.map((row: any) => row.match_id);
       if (matchIds.length > 0) {
         const response = await fetch(`/api/match-roster?match_ids=${matchIds.join(",")}`);
         if (response.ok) {

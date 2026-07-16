@@ -10,6 +10,7 @@ export default function AdminMatchesPage() {
   const supabase = createClient();
   const access = useMyAccess();
   const [matches, setMatches] = useState<any[]>([]);
+  const [allowDelete, setAllowDelete] = useState(true);
 
   async function load() {
     const { data } = await supabase
@@ -18,6 +19,8 @@ export default function AdminMatchesPage() {
       .not("status", "eq", "draft")
       .order("proposed_at", { ascending: false });
     setMatches(data ?? []);
+    const { data: settingsRow } = await supabase.from("club_settings").select("allow_match_delete").single();
+    setAllowDelete(settingsRow?.allow_match_delete ?? true);
   }
 
   async function updateTimeout(matchId: string, hours: number) {
@@ -176,7 +179,7 @@ export default function AdminMatchesPage() {
                           Cancel
                         </button>
                       )}
-                      {access.role === "manager" && (
+                      {access.role === "manager" && allowDelete && (
                         <button
                           onClick={() => deleteMatch(m.id, m.match_number)}
                           className="rounded border border-stone-400 px-2 py-0.5 text-xs text-stone-600 hover:bg-stone-100"

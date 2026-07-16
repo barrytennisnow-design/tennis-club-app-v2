@@ -17,6 +17,12 @@ export async function POST(request: Request) {
   if (!me || me.role !== "manager") return NextResponse.json({ error: "Not authorized" }, { status: 403 });
 
   const admin = createAdminClient();
+
+  const { data: clubSettings } = await admin.from("club_settings").select("allow_match_delete").single();
+  if (clubSettings?.allow_match_delete === false) {
+    return NextResponse.json({ error: "Match deletion is turned off in Settings" }, { status: 403 });
+  }
+
   const { error } = await admin.from("matches").delete().eq("id", match_id);
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
 

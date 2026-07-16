@@ -119,6 +119,7 @@ export default function SettingsPage() {
         self_serve_window_days: settings.self_serve_window_days ?? 3,
         sandbox_mode: settings.sandbox_mode ?? true,
         sandbox_email: settings.sandbox_email || "",
+        allow_match_delete: settings.allow_match_delete ?? true,
       })
       .eq("id", true);
     setSaving(false);
@@ -617,6 +618,25 @@ export default function SettingsPage() {
             onChange={(e) => setSettings({ ...settings, sandbox_email: e.target.value })}
             placeholder="you@example.com"
           />
+        </label>
+      </div>
+
+      {/* Matches Page Delete Button */}
+      <div className="space-y-4">
+        <h2 className="text-lg font-semibold">Matches Page Delete Button</h2>
+        <p className="text-xs text-stone-500">
+          Controls whether the permanent "Delete" button (for clearing out test/junk matches) shows
+          up on the Matches page at all. Turning this off doesn't undo anything already deleted --
+          it just hides the button so it can't be clicked by accident during normal day-to-day use.
+        </p>
+        <label className="flex items-center gap-2 text-sm font-medium">
+          <input
+            type="checkbox"
+            disabled={access.role !== "manager"}
+            checked={settings.allow_match_delete ?? true}
+            onChange={(e) => setSettings({ ...settings, allow_match_delete: e.target.checked })}
+          />
+          Show the Delete button on the Matches page
         </label>
       </div>
 
