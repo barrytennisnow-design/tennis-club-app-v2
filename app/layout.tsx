@@ -1,6 +1,7 @@
 import "./globals.css";
 import ImpersonationBanner from "@/components/ImpersonationBanner";
 import NavBar from "@/components/NavBar";
+import { ZoomProvider, ZoomedContent } from "@/lib/zoomContext";
 
 export const metadata = {
   title: "Club Tennis",
@@ -20,9 +21,13 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
   return (
     <html lang="en">
       <body>
-        <ImpersonationBanner />
-        <NavBar />
-        <main className="mx-auto max-w-6xl px-4 py-8">{children}</main>
+        <ZoomProvider>
+          <ImpersonationBanner />
+          <NavBar />
+          <main className="mx-auto max-w-6xl px-4 py-8">
+            <ZoomedContent>{children}</ZoomedContent>
+          </main>
+        </ZoomProvider>
       </body>
     </html>
   );

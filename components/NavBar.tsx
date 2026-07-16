@@ -4,10 +4,12 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { createClient } from "@/lib/supabaseClient";
+import { useZoom, ZOOM_LEVELS } from "@/lib/zoomContext";
 
 export default function NavBar() {
   const supabase = createClient();
   const pathname = usePathname();
+  const { zoom, setZoom } = useZoom();
   const [isManager, setIsManager] = useState(false);
   const [isCaptain, setIsCaptain] = useState(false);
   const [selfServeOptIn, setSelfServeOptIn] = useState(false);
@@ -56,6 +58,18 @@ export default function NavBar() {
           <Link href="/profile" className={linkClass("/profile")}>Profile</Link>
           {!loggedIn && <Link href="/login" className={linkClass("/login")}>Log in</Link>}
           {isManager && <Link href="/admin" className={linkClass("/admin")}>Manager</Link>}
+          <label className="flex items-center gap-1 text-xs text-stone-500">
+            Zoom
+            <select
+              value={zoom}
+              onChange={(e) => setZoom(Number(e.target.value))}
+              className="rounded border border-stone-300 px-1 py-0.5"
+            >
+              {ZOOM_LEVELS.map((z) => (
+                <option key={z} value={z}>{z}%</option>
+              ))}
+            </select>
+          </label>
         </nav>
       </div>
 

@@ -58,7 +58,6 @@ export default function MatchMatrixPage() {
   const [loading, setLoading] = useState(true);
   const [generating, setGenerating] = useState(false);
   const [lastResult, setLastResult] = useState<string | null>(null);
-  const [zoom, setZoom] = useState(100);
   const [startDate, setStartDate] = useState(isoDaysFromNow(0));
   const [endDate, setEndDate] = useState(isoDaysFromNow(29));
   const [viewStart, setViewStart] = useState(isoDaysFromNow(0));
@@ -389,18 +388,6 @@ export default function MatchMatrixPage() {
     <div className="space-y-1.5">
       <div className="flex flex-wrap items-center justify-between gap-2">
         <h1 className="text-base font-bold">Match Matrix</h1>
-        <label className="flex items-center gap-1 text-xs text-stone-500">
-          Zoom
-          <select
-            value={zoom}
-            onChange={(e) => setZoom(Number(e.target.value))}
-            className="rounded border border-stone-300 px-1 py-0.5"
-          >
-            {[50, 60, 70, 80, 90, 100, 110, 125, 150].map((z) => (
-              <option key={z} value={z}>{z}%</option>
-            ))}
-          </select>
-        </label>
       </div>
 
       {loadError && (
@@ -456,7 +443,6 @@ export default function MatchMatrixPage() {
       </div>
 
       <div className="overflow-x-auto rounded-md border">
-        <div style={{ zoom: zoom / 100 }}>
         <table className="text-xs">
           <thead className="bg-stone-100">
             <tr>
@@ -602,7 +588,6 @@ export default function MatchMatrixPage() {
             </tr>
           </tbody>
         </table>
-        </div>
       </div>
 
       {selectedMatch && selectedPlayer && (
