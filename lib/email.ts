@@ -33,13 +33,18 @@ export async function sendEmail({
   let status = "sent";
   let errorMessage: string | null = null;
 
-  // Sandbox mode: reroute every email to one inbox (the manager's)
-  // instead of real players, so you can test the whole system --
-  // match proposals, nudges, cancellations, access links -- without
-  // spamming real people. Turn on by setting SANDBOX_MODE=true and
-  // SANDBOX_EMAIL=you@example.com in your environment variables.
-  const sandboxOn = process.env.SANDBOX_MODE === "true";
-  const actualRecipient = sandboxOn && process.env.SANDBOX_EMAIL ? process.env.SANDBOX_EMAIL : to;
+  // Sandbox mode: reroute every email to one inbox instead of real
+  // players, so you can test the whole system -- match proposals,
+  // nudges, cancellations, access links -- without spamming real
+  // people. Controlled from Settings (club_settings.sandbox_mode /
+  // sandbox_email), manager-only -- not an env var anymore, so it
+  // can be toggled without a Vercel redeploy.
+  const { data: clubSettings } = await supabaseAdmin
+    .from("club_settings")
+    .select("sandbox_mode, sandbox_email")
+    .single();
+  const sandboxOn = clubSettings?.sandbox_mode === true;
+  const actualRecipient = sandboxOn && clubSettings?.sandbox_email ? clubSettings.sandbox_email : to;
   const actualSubject = sandboxOn ? `[TEST → ${to}] ${subject}` : subject;
 
   if (!resend) {

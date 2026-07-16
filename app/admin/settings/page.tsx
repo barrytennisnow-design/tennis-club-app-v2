@@ -117,6 +117,8 @@ export default function SettingsPage() {
         default_timeout_hours: settings.default_timeout_hours || 24,
         nudge_frequency_hours: settings.nudge_frequency_hours || 12,
         self_serve_window_days: settings.self_serve_window_days ?? 3,
+        sandbox_mode: settings.sandbox_mode ?? true,
+        sandbox_email: settings.sandbox_email || "",
       })
       .eq("id", true);
     setSaving(false);
@@ -583,6 +585,37 @@ export default function SettingsPage() {
             value={settings.nudge_frequency_hours ?? 12}
             onChange={(e) => setSettings({ ...settings, nudge_frequency_hours: parseInt(e.target.value) || 12 })}
             min="1"
+          />
+        </label>
+      </div>
+
+      {/* Email Test Mode */}
+      <div className="space-y-4">
+        <h2 className="text-lg font-semibold">Email Test Mode</h2>
+        <p className="text-xs text-stone-500">
+          While on, every email the system sends (match proposals, nudges, cancellations, access
+          links) gets rerouted to the single address below instead of the real player -- so you can
+          test the whole system without emailing real members. Manager-only, on purpose: this is
+          the one setting where forgetting to flip it back is the most likely to cause real harm.
+        </p>
+        <label className="flex items-center gap-2 text-sm font-medium">
+          <input
+            type="checkbox"
+            disabled={access.role !== "manager"}
+            checked={settings.sandbox_mode ?? true}
+            onChange={(e) => setSettings({ ...settings, sandbox_mode: e.target.checked })}
+          />
+          System is in test mode (reroute all email)
+        </label>
+        <label className="block text-sm font-medium">
+          Send all test-mode email to
+          <input
+            type="email"
+            disabled={access.role !== "manager"}
+            className="mt-1 w-full rounded border border-stone-300 px-2 py-1 disabled:bg-stone-100 disabled:text-stone-400"
+            value={settings.sandbox_email ?? ""}
+            onChange={(e) => setSettings({ ...settings, sandbox_email: e.target.value })}
+            placeholder="you@example.com"
           />
         </label>
       </div>
