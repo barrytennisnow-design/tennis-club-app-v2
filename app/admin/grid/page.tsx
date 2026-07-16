@@ -150,7 +150,7 @@ export default function MatchMatrixPage() {
     setGenerating(false);
     if (json.ok) {
       const total = json.results.reduce((s: number, r: any) => s + r.matchesCreated, 0);
-      setLastResult(`Built ${total} draft match(es) across ${json.results.length} day(s). Cancelled matches were cleared and their players redrafted.`);
+      setLastResult(`Built ${total} draft match(es) across ${json.results.length} day(s). Old drafts were cleared and rebuilt -- cancelled and proposed/confirmed matches were left untouched.`);
       // Make sure the grid's visible window actually covers whatever
       // range was just generated -- otherwise new matches could exist
       // in the database but never show up on screen.

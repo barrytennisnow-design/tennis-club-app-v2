@@ -1,9 +1,9 @@
 // Core match-making algorithm -- builds silent DRAFT matches only.
 // No emails are sent here. Drafts are a manager's working scratch
-// pad: re-running this wipes out any existing drafts and rebuilds
-// them fresh from current availability, WITHOUT touching any match
-// that's already been proposed, confirmed, or cancelled (those are
-// "live" and out of scope for regeneration).
+// pad: re-running this wipes out any existing DRAFTS ONLY and
+// rebuilds them fresh from current availability, WITHOUT touching
+// any match that's already been proposed, confirmed, or cancelled
+// (those are "live"/historical and out of scope for regeneration).
 //
 // For each day/time-slot in the given date range:
 //   1. Find active players available that day who are not already
@@ -46,20 +46,24 @@ export async function generateMatches({ supabaseAdmin, startDate, endDate }: Gen
   // Number the new batch starting from the highest match_number that's
   // actually visible on the Matches Tracking page (and to players) --
   // i.e. proposed or confirmed matches. Draft and cancelled matches
-  // don't count: drafts are this function's own scratch pad and
-  // cancelled matches get wiped a few lines below, so neither should
-  // ever inflate the next number. If there are no proposed/confirmed
-  // matches at all, numbering restarts at M1.
+  // don't count: drafts are this function's own scratch pad (wiped
+  // and rebuilt every run), and cancelled matches, while they DO stay
+  // in the table permanently now, never held a "live" number that
+  // should influence what comes next. If there are no proposed/
+  // confirmed matches at all, numbering restarts at M1.
   let nextMatchNumber = await getNextMatchNumber(supabaseAdmin);
 
-  // Wipe existing DRAFT matches so this run starts clean, AND clean
-  // out CANCELLED matches too -- their players are already free to
-  // be redrafted (cancelled doesn't lock anyone), this just clears
-  // the clutter so old cancelled matches don't pile up forever.
+  // Wipe existing DRAFT matches so this run starts clean. Cancelled
+  // matches are NOT touched -- they're historical record and should
+  // stay visible on the Matches Tracking page indefinitely, same as
+  // proposed/confirmed matches. (This used to also delete cancelled
+  // matches "to clear the clutter" -- that was wrong: it silently
+  // erased real cancellation history every time a manager regenerated
+  // the matrix, whether the match came from the matrix or self-serve.)
   const { data: staleMatches } = await supabaseAdmin
     .from("matches")
     .select("id")
-    .in("status", ["draft", "cancelled"]);
+    .eq("status", "draft");
   if (staleMatches && staleMatches.length > 0) {
     await supabaseAdmin.from("matches").delete().in("id", staleMatches.map((m: any) => m.id));
   }
