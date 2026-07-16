@@ -30,6 +30,30 @@ export default function AdminMatchesPage() {
     load();
   }
 
+  async function cancelMatch(matchId: string, matchNumber: number) {
+    if (!confirm(`Cancel match M${matchNumber}? Everyone in it will be emailed that it's cancelled.`)) return;
+    const res = await fetch("/api/admin/cancel-match", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ match_id: matchId }),
+    });
+    const json = await res.json();
+    if (!json.ok) { alert(json.error ?? "Couldn't cancel that match"); return; }
+    load();
+  }
+
+  async function deleteMatch(matchId: string, matchNumber: number) {
+    if (!confirm(`Permanently DELETE match M${matchNumber}? This cannot be undone and sends no notifications -- only use this for test/junk matches.`)) return;
+    const res = await fetch("/api/admin/delete-match", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ match_id: matchId }),
+    });
+    const json = await res.json();
+    if (!json.ok) { alert(json.error ?? "Couldn't delete that match"); return; }
+    load();
+  }
+
   useEffect(() => {
     load();
   }, []);
@@ -50,8 +74,10 @@ export default function AdminMatchesPage() {
         </a>
       </div>
 
-      {/* Read-only overview -- all editing (propose/cancel/swap/court)
-          happens on the Match Matrix page now. */}
+      {/* Cancel and (manager-only) permanent Delete are available
+          right here now. Everything else -- propose/swap/court --
+          still happens on the Match Matrix page. Cancelled matches
+          stay listed here (only drafts are excluded from this view). */}
       <div className="overflow-x-auto rounded-md border">
         <table className="w-full min-w-[900px] text-xs">
           <thead className="bg-stone-100 text-left text-stone-600">
@@ -71,6 +97,7 @@ export default function AdminMatchesPage() {
               <th className="p-2">Cancelled</th>
               <th className="p-2">Hours for Auto Cancel</th>
               <th className="p-2">Nudge Count</th>
+              <th className="p-2">Actions</th>
             </tr>
           </thead>
           <tbody>
@@ -139,11 +166,32 @@ export default function AdminMatchesPage() {
                       <span className="text-stone-400">{m.nudge_count ?? 0}</span>
                     )}
                   </td>
+                  <td className="p-2">
+                    <div className="flex gap-1">
+                      {(m.status === "proposed" || m.status === "confirmed") && hasPermission(access, "matrix_cancel_match") && (
+                        <button
+                          onClick={() => cancelMatch(m.id, m.match_number)}
+                          className="rounded border border-red-300 px-2 py-0.5 text-xs text-red-700 hover:bg-red-50"
+                        >
+                          Cancel
+                        </button>
+                      )}
+                      {access.role === "manager" && (
+                        <button
+                          onClick={() => deleteMatch(m.id, m.match_number)}
+                          className="rounded border border-stone-400 px-2 py-0.5 text-xs text-stone-600 hover:bg-stone-100"
+                          title="Permanently delete -- for test data cleanup only"
+                        >
+                          Delete
+                        </button>
+                      )}
+                    </div>
+                  </td>
                 </tr>
               );
             })}
             {matches.length === 0 && (
-              <tr><td colSpan={15} className="p-4 text-center text-stone-400">No matches yet.</td></tr>
+              <tr><td colSpan={16} className="p-4 text-center text-stone-400">No matches yet.</td></tr>
             )}
           </tbody>
         </table>
