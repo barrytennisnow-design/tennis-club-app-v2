@@ -1,28 +1,44 @@
 "use client";
 
 import { createContext, useContext, useEffect, useState } from "react";
+import { usePathname } from "next/navigation";
 
 type ZoomCtx = { zoom: number; setZoom: (z: number) => void };
 
 const ZoomContext = createContext<ZoomCtx>({ zoom: 100, setZoom: () => {} });
 
-const STORAGE_KEY = "tennis_club_zoom";
+const STORAGE_KEY = "tennis_club_zoom_by_page";
 
-// Site-wide zoom, remembered across page loads/navigation (not tied
-// to any one page). Same options and behavior that used to live only
-// on the Match Matrix page.
+function readStoredZooms(): Record<string, number> {
+  try {
+    const raw = window.localStorage.getItem(STORAGE_KEY);
+    return raw ? JSON.parse(raw) : {};
+  } catch {
+    return {};
+  }
+}
+
+// Zoom is remembered per PAGE, not as one single site-wide value --
+// e.g. the Match Matrix can stay at 70% while Availability stays at
+// 100%, and each page comes back at whatever it was last set to.
 export function ZoomProvider({ children }: { children: React.ReactNode }) {
+  const pathname = usePathname();
   const [zoom, setZoomState] = useState(100);
 
+  // Whenever the page changes, load THAT page's last-used zoom
+  // (defaulting to 100% if this page has never had one set).
   useEffect(() => {
-    const saved = typeof window !== "undefined" ? window.localStorage.getItem(STORAGE_KEY) : null;
-    if (saved) setZoomState(Number(saved));
-  }, []);
+    if (typeof window === "undefined") return;
+    const stored = readStoredZooms();
+    setZoomState(stored[pathname ?? ""] ?? 100);
+  }, [pathname]);
 
   function setZoom(z: number) {
     setZoomState(z);
     try {
-      window.localStorage.setItem(STORAGE_KEY, String(z));
+      const stored = readStoredZooms();
+      stored[pathname ?? ""] = z;
+      window.localStorage.setItem(STORAGE_KEY, JSON.stringify(stored));
     } catch {
       // ignore -- zoom just won't persist across reloads, not worth failing over
     }
