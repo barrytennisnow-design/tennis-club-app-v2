@@ -50,6 +50,20 @@ export async function POST(request: Request) {
     .eq("id", match_id);
   if (updateError) return NextResponse.json({ error: updateError.message }, { status: 500 });
 
+  // If the manager/captain proposing this match is themselves one of
+  // the players in it, auto-accept on their behalf -- same as
+  // self-serve, where the person building the match is implicitly
+  // "in" as soon as they propose it. Everyone else still has to
+  // respond normally.
+  const proposerIsInMatch = match.match_players.some((mp: any) => mp.player_id === me.id);
+  if (proposerIsInMatch) {
+    await admin
+      .from("match_players")
+      .update({ response_status: "accepted", responded_at: new Date().toISOString() })
+      .eq("match_id", match_id)
+      .eq("player_id", me.id);
+  }
+
   const siteUrl = process.env.NEXT_PUBLIC_SITE_URL ?? "";
 
   const defaultTimeDisplay = await getDefaultTimeDisplay(admin);
@@ -72,6 +86,7 @@ export async function POST(request: Request) {
   // on the player's Matches page).
   for (const mp of match.match_players) {
     if (!mp.players) continue;
+    if (mp.player_id === me.id) continue; // already auto-accepted above, no need to ask them to respond
     const teammates = match.match_players
       .filter((other: any) => other.player_id !== mp.player_id && other.players)
       .map((other: any) => `${other.players.first_name} ${other.players.last_name}`);
