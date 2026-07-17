@@ -35,7 +35,7 @@ export async function getNextMatchNumber(supabaseAdmin: any): Promise<number> {
   const { data: maxMatch } = await supabaseAdmin
     .from("matches")
     .select("match_number")
-    .in("status", ["proposed", "confirmed"])
+    .neq("status", "draft")
     .order("match_number", { ascending: false })
     .limit(1)
     .maybeSingle();
@@ -43,14 +43,15 @@ export async function getNextMatchNumber(supabaseAdmin: any): Promise<number> {
 }
 
 export async function generateMatches({ supabaseAdmin, startDate, endDate }: GenerateMatchesParams) {
-  // Number the new batch starting from the highest match_number that's
-  // actually visible on the Matches Tracking page (and to players) --
-  // i.e. proposed or confirmed matches. Draft and cancelled matches
-  // don't count: drafts are this function's own scratch pad (wiped
-  // and rebuilt every run), and cancelled matches, while they DO stay
-  // in the table permanently now, never held a "live" number that
-  // should influence what comes next. If there are no proposed/
-  // confirmed matches at all, numbering restarts at M1.
+  // Number the new batch starting from the highest match_number ever
+  // assigned to a proposed, confirmed, OR cancelled match. Match
+  // numbers are unique and must never be reused -- a cancelled match
+  // stays permanently visible on the Matches page under its original
+  // number, so handing that same number to a new match would put two
+  // different matches on screen both labeled e.g. "M3". Only drafts
+  // are excluded: they're this function's own scratch pad, wiped and
+  // rebuilt every run, and never held a number that needs protecting.
+  // If there are no non-draft matches at all, numbering restarts at M1.
   let nextMatchNumber = await getNextMatchNumber(supabaseAdmin);
 
   // Wipe existing DRAFT matches so this run starts clean. Cancelled
