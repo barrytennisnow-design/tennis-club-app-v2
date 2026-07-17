@@ -90,7 +90,7 @@ export async function POST(request: Request) {
         to: mp.players.email,
         subject,
         html,
-        attachments: [{ filename: "match.ics", content: icsBase64 }],
+        attachments: [{ filename: "match.ics", content: icsBase64, content_type: "text/calendar; charset=utf-8; method=PUBLISH" }],
       });
     }
   } else if (updatedMatch.status === "cancelled" && response === "declined") {

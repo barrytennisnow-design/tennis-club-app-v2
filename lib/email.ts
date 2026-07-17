@@ -27,7 +27,7 @@ export async function sendEmail({
   to: string;
   subject: string;
   html: string;
-  attachments?: { filename: string; content: string }[]; // content = base64
+  attachments?: { filename: string; content: string; content_type?: string }[]; // content = base64
 }) {
   const resend = getResend();
   let status = "sent";
@@ -56,7 +56,7 @@ export async function sendEmail({
         to: actualRecipient,
         subject: actualSubject,
         html,
-        ...(attachments ? { attachments } : {}),
+        ...(attachments ? { attachments: attachments as any } : {}),
       });
       if (error) {
         status = "failed";
