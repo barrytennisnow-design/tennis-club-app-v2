@@ -156,7 +156,7 @@ export default function MyMatchesPage() {
             {mp.matches.status === "confirmed" && (
               <div className="mt-3 space-y-3">
                 <a
-                  href={`/api/ics/${mp.matches.id}`}
+                  href={`/api/ics/${mp.id}`}
                   className="inline-block rounded-md bg-court-green px-3 py-1 text-sm text-white"
                 >
                   Download Calendar Invite (.ics)
