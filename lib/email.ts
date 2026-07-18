@@ -41,13 +41,17 @@ export async function sendEmail({
   // can be toggled without a Vercel redeploy.
   const { data: clubSettings } = await supabaseAdmin
     .from("club_settings")
-    .select("sandbox_mode, sandbox_email")
+    .select("sandbox_mode, sandbox_email, email_test_mode_disable_emails")
     .single();
   const sandboxOn = clubSettings?.sandbox_mode === true;
+  const disableEmails = clubSettings?.email_test_mode_disable_emails === true;
   const actualRecipient = sandboxOn && clubSettings?.sandbox_email ? clubSettings.sandbox_email : to;
   const actualSubject = sandboxOn ? `[TEST → ${to}] ${subject}` : subject;
 
-  if (!resend) {
+  // If emails are disabled, skip sending but still log
+  if (disableEmails) {
+    status = "skipped_emails_disabled";
+  } else if (!resend) {
     status = "skipped_no_api_key";
   } else {
     try {

@@ -56,6 +56,10 @@ export async function POST(request: Request) {
 
   if (!updatedMatch) return NextResponse.json({ ok: true });
 
+  // Fetch email test mode settings
+  const { data: settings } = await admin.from("club_settings").select("email_test_mode_send_to_first_only").single();
+  const sendToFirstOnly = settings?.email_test_mode_send_to_first_only === true;
+
   if (updatedMatch.status === "confirmed") {
     const playerNames = updatedMatch.match_players.map((mp: any) => mp.players ? `${mp.players.first_name} ${mp.players.last_name}` : 'Unknown');
     const defaultTimeDisplay = await getDefaultTimeDisplay(admin);
@@ -69,8 +73,13 @@ export async function POST(request: Request) {
     });
     const icsBase64 = Buffer.from(ics).toString("base64");
 
+    let firstPlayerSent = false;
     for (const mp of updatedMatch.match_players) {
       if (!mp.players) continue;
+      
+      // If send_to_first_only is enabled, only send to the first player
+      if (sendToFirstOnly && firstPlayerSent) continue;
+      
       const teammates = playerNames.filter((n: string) => n !== `${mp.players.first_name} ${mp.players.last_name}`);
       const playerAddress = [mp.players.address, mp.players.city, mp.players.state, mp.players.zip]
         .filter(Boolean)
@@ -92,12 +101,20 @@ export async function POST(request: Request) {
         html,
         attachments: [{ filename: "match.ics", content: icsBase64, content_type: "text/calendar; charset=utf-8; method=PUBLISH" }],
       });
+      
+      firstPlayerSent = true;
     }
   } else if (updatedMatch.status === "cancelled" && response === "declined") {
     const defaultTimeDisplay = await getDefaultTimeDisplay(admin);
     const timeDisplay = resolveTimeDisplay(updatedMatch, defaultTimeDisplay);
+    
+    let firstPlayerSent = false;
     for (const mp of updatedMatch.match_players) {
       if (!mp.players) continue;
+      
+      // If send_to_first_only is enabled, only send to the first player
+      if (sendToFirstOnly && firstPlayerSent) continue;
+      
       const { subject, html } = matchCancelledEmail({
         matchNumber: updatedMatch.match_number,
         firstName: mp.players.first_name,
@@ -107,6 +124,8 @@ export async function POST(request: Request) {
         declineReason: decline_reason || null,
       });
       await sendEmail({ supabaseAdmin: admin, to: mp.players.email, subject, html });
+      
+      firstPlayerSent = true;
     }
   }
 

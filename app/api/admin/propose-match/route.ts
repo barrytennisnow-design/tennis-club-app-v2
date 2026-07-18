@@ -35,8 +35,9 @@ export async function POST(request: Request) {
   // cancel" column, which the manager set going into each proposal
   // round. Nudge count always restarts at 0 for a newly-proposed
   // match; both stay manager-editable afterward on the Matches page.
-  const { data: settings } = await admin.from("club_settings").select("default_timeout_hours").single();
+  const { data: settings } = await admin.from("club_settings").select("default_timeout_hours, email_test_mode_send_to_first_only").single();
   const autoCancelHours = settings?.default_timeout_hours ?? 24;
+  const sendToFirstOnly = settings?.email_test_mode_send_to_first_only === true;
 
   const { error: updateError } = await admin
     .from("matches")
@@ -84,9 +85,14 @@ export async function POST(request: Request) {
   // is only offered once it's actually confirmed (see
   // respond-match/route.ts and the "Download Calendar Invite" button
   // on the player's Matches page).
+  let firstPlayerSent = false;
   for (const mp of match.match_players) {
     if (!mp.players) continue;
     if (mp.player_id === me.id) continue; // already auto-accepted above, no need to ask them to respond
+    
+    // If send_to_first_only is enabled, only send to the first player
+    if (sendToFirstOnly && firstPlayerSent) continue;
+    
     const teammates = match.match_players
       .filter((other: any) => other.player_id !== mp.player_id && other.players)
       .map((other: any) => `${other.players.first_name} ${other.players.last_name}`);
@@ -115,6 +121,8 @@ export async function POST(request: Request) {
       subject,
       html,
     });
+    
+    firstPlayerSent = true;
   }
 
   return NextResponse.json({ ok: true });
