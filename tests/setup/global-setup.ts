@@ -34,7 +34,7 @@ export const TEST_USERS = {
 export const STORAGE_DIR = path.join(__dirname, ".auth");
 
 async function loginAndSaveState(
-  admin: ReturnType<typeof createClient>,
+  admin: any,
   siteUrl: string,
   email: string,
   outFile: string,
