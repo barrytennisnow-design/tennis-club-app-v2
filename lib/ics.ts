@@ -44,12 +44,18 @@ export function buildMatchIcs({
   timeDisplay,
   courtName,
   playerNames,
+  courtAddress,
+  courtLatitude,
+  courtLongitude,
 }: {
   matchId: string;
   matchDate: string;
   timeDisplay: string;
   courtName: string;
   playerNames: string[];
+  courtAddress?: string | null;
+  courtLatitude?: number | null;
+  courtLongitude?: number | null;
 }) {
   const slot = parseStartTime(timeDisplay || "");
   const dtStart = icsDate(matchDate, slot.start);
@@ -59,6 +65,21 @@ export function buildMatchIcs({
   const summary = escapeIcs(`Tennis Match — ${courtName}`);
   const description = escapeIcs(`${timeDisplay || ""}\nPlaying with: ${playerNames.join(", ")}`);
   const location = escapeIcs(courtName);
+
+  // Confirmed from the prior system's actual working source code:
+  // X-APPLE-TRAVEL-DURATION;VALUE=DURATION:PT30M below sets a fixed
+  // 30-minute Travel Time directly -- no geocoded location needed.
+  // (General Apple documentation describes a location-based, live
+  // Apple-Maps-computed version of this feature, which is why an
+  // X-APPLE-STRUCTURED-LOCATION option is also supported below for
+  // courts that have coordinates entered -- but the static duration
+  // property is what the confirmed-working prior system actually
+  // used, and doesn't depend on that at all.)
+  const structuredLocation =
+    courtLatitude != null && courtLongitude != null
+      ? `X-APPLE-STRUCTURED-LOCATION;VALUE=URI;X-ADDRESS="${escapeIcs(courtAddress ?? courtName).replace(/"/g, "'")}";X-APPLE-RADIUS=100;X-TITLE="${courtName.replace(/"/g, "'")}"`
+        + `:geo:${courtLatitude},${courtLongitude}`
+      : null;
 
   const ics = [
     "BEGIN:VCALENDAR",
@@ -74,7 +95,10 @@ export function buildMatchIcs({
     `SUMMARY:${summary}`,
     `DESCRIPTION:${description}`,
     `LOCATION:${location}`,
+    ...(structuredLocation ? [structuredLocation] : []),
     "STATUS:CONFIRMED",
+    "SEQUENCE:0",
+    "X-APPLE-TRAVEL-DURATION;VALUE=DURATION:PT30M",
     "BEGIN:VALARM",
     "ACTION:DISPLAY",
     "TRIGGER:-PT30M",
