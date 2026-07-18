@@ -40,6 +40,10 @@ const MATCH_PALETTE = [
   "bg-[#D1ECF1]", // blue
   "bg-[#F8D7DA]", // red
   "bg-[#E5D4ED]", // purple
+  "bg-[#FFD8E8]", // pink
+  "bg-[#D6F5E8]", // teal
+  "bg-[#E8E0D0]", // tan
+  "bg-[#DCE4F5]", // periwinkle
 ];
 const UNASSIGNED_COLOR = "bg-[#F8F9FA]";
 
@@ -70,6 +74,25 @@ export default function MatchMatrixPage() {
   const [tempCourt, setTempCourt] = useState<string>("");
   const [tempTime, setTempTime] = useState<string>("");
   const days = daysBetween(viewStart, viewEnd);
+
+  // Colors are assigned PER DAY, not globally by match_number -- two
+  // different matches happening on the SAME day must never share a
+  // color (that's what made them visually indistinguishable on the
+  // grid), but reusing a color across two DIFFERENT days is fine
+  // since they're never compared side by side. Deterministic order
+  // (sorted by match_number) so a given match's color doesn't jitter
+  // between renders.
+  const matchColor: Record<string, string> = {};
+  for (const d of days) {
+    const dayMatches = matches.filter((m) => m.match_date === d);
+    const uniqueDayMatches = Array.from(new Map(dayMatches.map((m) => [m.id, m])).values());
+    uniqueDayMatches
+      .slice()
+      .sort((a, b) => a.match_number - b.match_number)
+      .forEach((m, idx) => {
+        matchColor[m.id] = MATCH_PALETTE[idx % MATCH_PALETTE.length];
+      });
+  }
 
   async function load() {
     const { data: playerRows } = await supabase
@@ -474,7 +497,7 @@ export default function MatchMatrixPage() {
                   const isOverloaded = overloaded.has(`${p.id}_${d}`);
                   const isSelected = selected?.playerId === p.id && selected?.date === d;
                   const color = m
-                    ? MATCH_PALETTE[m.match_number % MATCH_PALETTE.length]
+                    ? matchColor[m.id]
                     : isAvailUnassigned
                     ? UNASSIGNED_COLOR
                     : "";
@@ -514,7 +537,7 @@ export default function MatchMatrixPage() {
                   <td key={d} className="p-1 align-top">
                     <div className="space-y-1">
                       {uniqueMatches.map((m) => {
-                        const color = MATCH_PALETTE[m.match_number % MATCH_PALETTE.length];
+                        const color = matchColor[m.id];
                         return (
                           <div key={m.id} className={`rounded p-1 ${color}`}>
                             <div className="text-xs font-semibold">
