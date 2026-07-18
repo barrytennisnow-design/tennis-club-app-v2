@@ -122,6 +122,8 @@ export default function SettingsPage() {
         sandbox_mode: settings.sandbox_mode ?? true,
         sandbox_email: settings.sandbox_email || "",
         allow_match_delete: settings.allow_match_delete ?? true,
+        email_test_mode_send_to_first_only: settings.email_test_mode_send_to_first_only ?? false,
+        email_test_mode_disable_emails: settings.email_test_mode_disable_emails ?? false,
       })
       .eq("id", true);
     setSaving(false);
