@@ -1,0 +1,20 @@
+# Dependencies
+node_modules/
+
+# Next.js build output
+.next/
+out/
+
+# Environment variables (never commit real secrets)
+.env
+.env.local
+.env.test
+
+# Playwright / E2E test artifacts
+tests/.auth/
+tests/test-results/
+tests/playwright-report/
+
+# Editor/OS cruft
+.DS_Store
+*.log
