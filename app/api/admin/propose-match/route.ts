@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { createClient, createAdminClient } from "@/lib/supabaseServer";
 import { sendEmail, matchProposedEmail } from "@/lib/email";
+import { getEmailTestModeSettings, applyFirstOnlyFilter } from "@/lib/emailTestMode";
 import { getDefaultTimeDisplay, resolveTimeDisplay } from "@/lib/timeDisplay";
 import { checkSameDayConflict } from "@/lib/conflict";
 import { hasPermission } from "@/lib/permissions";
@@ -18,7 +19,7 @@ export async function POST(request: Request) {
 
   const { data: match } = await admin
     .from("matches")
-    .select("*, court:courts(name), match_players(player_id, players(first_name, last_name, email))")
+    .select("*, court:courts(name), match_players(player_id, created_at, players(first_name, last_name, email))")
     .eq("id", match_id)
     .single();
 
@@ -84,7 +85,13 @@ export async function POST(request: Request) {
   // is only offered once it's actually confirmed (see
   // respond-match/route.ts and the "Download Calendar Invite" button
   // on the player's Matches page).
-  for (const mp of match.match_players) {
+  const testMode = await getEmailTestModeSettings(admin);
+  const sortedMatchPlayers = [...match.match_players].sort(
+    (a: any, b: any) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime()
+  );
+  const emailRecipients = applyFirstOnlyFilter(sortedMatchPlayers, testMode);
+
+  for (const mp of emailRecipients) {
     if (!mp.players) continue;
     if (mp.player_id === me.id) continue; // already auto-accepted above, no need to ask them to respond
     const teammates = match.match_players

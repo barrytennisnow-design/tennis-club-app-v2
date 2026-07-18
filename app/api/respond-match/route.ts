@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { createClient, createAdminClient } from "@/lib/supabaseServer";
 import { sendEmail, matchConfirmedEmail, matchCancelledEmail } from "@/lib/email";
+import { getEmailTestModeSettings, applyFirstOnlyFilter } from "@/lib/emailTestMode";
 import { buildMatchIcs } from "@/lib/ics";
 import { getDefaultTimeDisplay, resolveTimeDisplay } from "@/lib/timeDisplay";
 
@@ -50,7 +51,7 @@ export async function POST(request: Request) {
   // resulting match status.
   const { data: updatedMatch } = await admin
     .from("matches")
-    .select("*, court:courts(name, address, latitude, longitude), proposer:players!proposed_by(first_name, last_name), match_players(response_status, decline_reason, players(first_name, last_name, email, address, city, state, zip))")
+    .select("*, court:courts(name, address, latitude, longitude), proposer:players!proposed_by(first_name, last_name), match_players(response_status, decline_reason, created_at, players(first_name, last_name, email, address, city, state, zip))")
     .eq("id", mpRow.match_id)
     .single();
 
@@ -72,7 +73,13 @@ export async function POST(request: Request) {
     });
     const icsBase64 = Buffer.from(ics).toString("base64");
 
-    for (const mp of updatedMatch.match_players) {
+    const testMode = await getEmailTestModeSettings(admin);
+    const sortedMatchPlayers = [...updatedMatch.match_players].sort(
+      (a: any, b: any) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime()
+    );
+    const emailRecipients = applyFirstOnlyFilter(sortedMatchPlayers, testMode);
+
+    for (const mp of emailRecipients) {
       if (!mp.players) continue;
       const teammates = playerNames.filter((n: string) => n !== `${mp.players.first_name} ${mp.players.last_name}`);
       const playerAddress = [mp.players.address, mp.players.city, mp.players.state, mp.players.zip]
@@ -102,7 +109,12 @@ export async function POST(request: Request) {
   } else if (updatedMatch.status === "cancelled" && response === "declined") {
     const defaultTimeDisplay = await getDefaultTimeDisplay(admin);
     const timeDisplay = resolveTimeDisplay(updatedMatch, defaultTimeDisplay);
-    for (const mp of updatedMatch.match_players) {
+    const testMode = await getEmailTestModeSettings(admin);
+    const sortedMatchPlayers = [...updatedMatch.match_players].sort(
+      (a: any, b: any) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime()
+    );
+    const emailRecipients = applyFirstOnlyFilter(sortedMatchPlayers, testMode);
+    for (const mp of emailRecipients) {
       if (!mp.players) continue;
       const { subject, html } = matchCancelledEmail({
         matchNumber: updatedMatch.match_number,

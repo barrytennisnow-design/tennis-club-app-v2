@@ -9,6 +9,7 @@
 import { NextResponse } from "next/server";
 import { createClient, createAdminClient } from "@/lib/supabaseServer";
 import { sendEmail, matchProposedEmail } from "@/lib/email";
+import { getEmailTestModeSettings, applyFirstOnlyFilter } from "@/lib/emailTestMode";
 import { getDefaultTimeDisplay, resolveTimeDisplay } from "@/lib/timeDisplay";
 import { checkSameDayConflict } from "@/lib/conflict";
 import { getSelfServeWindowDays, isWithinSelfServeWindow, getAssignedPlayerIds } from "@/lib/selfServe";
@@ -117,7 +118,10 @@ export async function POST(request: Request) {
   const namesById = new Map<string, string>((availRows ?? []).map((r: any) => [r.player_id, `${r.players.first_name} ${r.players.last_name}`]));
   const siteUrl = process.env.NEXT_PUBLIC_SITE_URL ?? "";
 
-  for (const pid of player_ids) {
+  const testMode = await getEmailTestModeSettings(admin);
+  const emailRecipientIds = applyFirstOnlyFilter(player_ids, testMode);
+
+  for (const pid of emailRecipientIds) {
     const row = (availRows ?? []).find((r: any) => r.player_id === pid);
     if (!row) continue;
     const teammates = allPlayerIds.filter((id) => id !== pid).map((id) => namesById.get(id) ?? "Unknown");

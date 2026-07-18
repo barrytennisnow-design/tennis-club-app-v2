@@ -41,11 +41,26 @@ export async function sendEmail({
   // can be toggled without a Vercel redeploy.
   const { data: clubSettings } = await supabaseAdmin
     .from("club_settings")
-    .select("sandbox_mode, sandbox_email")
+    .select("sandbox_mode, sandbox_email, email_test_mode_disable_emails")
     .single();
   const sandboxOn = clubSettings?.sandbox_mode === true;
   const actualRecipient = sandboxOn && clubSettings?.sandbox_email ? clubSettings.sandbox_email : to;
   const actualSubject = sandboxOn ? `[TEST → ${to}] ${subject}` : subject;
+
+  // TEMPORARY TESTING FEATURE, remove before going live: when on,
+  // no email goes out at all, from anyone, for any reason. Still
+  // logged to email_log (status "skipped_disabled_test_mode") so the
+  // rest of the system behaves normally and there's a record of what
+  // WOULD have been sent.
+  if (clubSettings?.email_test_mode_disable_emails === true) {
+    await supabaseAdmin.from("email_log").insert({
+      recipient: to,
+      subject,
+      body: html,
+      status: "skipped_disabled_test_mode",
+    });
+    return { status: "skipped_disabled_test_mode" };
+  }
 
   if (!resend) {
     status = "skipped_no_api_key";

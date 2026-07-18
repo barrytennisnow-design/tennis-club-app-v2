@@ -15,6 +15,7 @@
 import { NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabaseServer";
 import { sendEmail, matchNudgeEmail, matchCancelledEmail } from "@/lib/email";
+import { getEmailTestModeSettings, applyFirstOnlyFilter } from "@/lib/emailTestMode";
 import { getDefaultTimeDisplay, resolveTimeDisplay } from "@/lib/timeDisplay";
 
 export async function GET(request: Request) {
@@ -39,10 +40,11 @@ export async function GET(request: Request) {
 
   const { data: proposedMatches } = await supabaseAdmin
     .from("matches")
-    .select("*, court:courts(name), proposer:players!proposed_by(first_name, last_name), match_players(id, response_status, players(first_name, email))")
+    .select("*, court:courts(name), proposer:players!proposed_by(first_name, last_name), match_players(id, response_status, created_at, players(first_name, email))")
     .eq("status", "proposed");
 
   const defaultTimeDisplay = await getDefaultTimeDisplay(supabaseAdmin);
+  const testMode = await getEmailTestModeSettings(supabaseAdmin);
 
   let nudged = 0;
   let cancelled = 0;
@@ -60,7 +62,11 @@ export async function GET(request: Request) {
         .update({ status: "cancelled", cancelled_at: now.toISOString() })
         .eq("id", match.id);
 
-      for (const mp of match.match_players) {
+      const sortedMatchPlayers = [...match.match_players].sort(
+        (a: any, b: any) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime()
+      );
+      const cancelRecipients = applyFirstOnlyFilter(sortedMatchPlayers, testMode);
+      for (const mp of cancelRecipients) {
         if (!mp.players) continue;
         const { subject, html } = matchCancelledEmail({
           matchNumber: match.match_number,
@@ -85,7 +91,11 @@ export async function GET(request: Request) {
       // Send nudge to anyone who hasn't responded yet
       const pending = match.match_players.filter((mp: any) => mp.response_status === "proposed");
       if (pending.length > 0) {
-        for (const mp of pending) {
+        const sortedPending = [...pending].sort(
+          (a: any, b: any) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime()
+        );
+        const nudgeRecipients = applyFirstOnlyFilter(sortedPending, testMode);
+        for (const mp of nudgeRecipients) {
           if (!mp.players) continue;
           const { subject, html } = matchNudgeEmail({
             matchNumber: match.match_number,

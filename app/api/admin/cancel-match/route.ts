@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { createClient, createAdminClient } from "@/lib/supabaseServer";
 import { sendEmail, matchCancelledEmail } from "@/lib/email";
+import { getEmailTestModeSettings, applyFirstOnlyFilter } from "@/lib/emailTestMode";
 import { getDefaultTimeDisplay, resolveTimeDisplay } from "@/lib/timeDisplay";
 import { hasPermission } from "@/lib/permissions";
 
@@ -17,7 +18,7 @@ export async function POST(request: Request) {
 
   const { data: match } = await admin
     .from("matches")
-    .select("*, proposer:players!proposed_by(first_name, last_name), match_players(players(first_name, email))")
+    .select("*, proposer:players!proposed_by(first_name, last_name), match_players(players(first_name, email), created_at)")
     .eq("id", match_id)
     .single();
 
@@ -37,7 +38,12 @@ export async function POST(request: Request) {
   if (!wasDraft) {
     const defaultTimeDisplay = await getDefaultTimeDisplay(admin);
     const timeDisplay = resolveTimeDisplay(match, defaultTimeDisplay);
-    for (const mp of match.match_players) {
+    const testMode = await getEmailTestModeSettings(admin);
+    const sortedMatchPlayers = [...match.match_players].sort(
+      (a: any, b: any) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime()
+    );
+    const emailRecipients = applyFirstOnlyFilter(sortedMatchPlayers, testMode);
+    for (const mp of emailRecipients) {
       if (!mp.players) continue;
       const { subject, html } = matchCancelledEmail({
         matchNumber: match.match_number,
