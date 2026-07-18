@@ -46,7 +46,9 @@ export default function MyMatchesPage() {
     if (p) {
       const { data: mp } = await supabase
         .from("match_players")
-        .select("id, response_status, decline_reason, match_id, matches!inner(id, match_number, match_date, time_slot, time_display, status, proposed_at, confirmed_at, cancelled_at, auto_cancel_hours, nudge_count, court:courts(name))")
+        .select(
+          "id, response_status, decline_reason, match_id, matches!inner(id, match_number, match_date, time_slot, time_display, status, proposed_at, confirmed_at, cancelled_at, auto_cancel_hours, nudge_count, court:courts(name), proposer:players!proposed_by(first_name, last_name))"
+        )
         .eq("player_id", p.id);
       const visibleMatches = (mp ?? []).filter((row: any) => row.matches?.status !== "draft" && row.matches?.status !== "cancelled");
       // Newest match date first, oldest at the bottom.
@@ -118,6 +120,7 @@ export default function MyMatchesPage() {
             <p>Date: {formatLongDate(mp.matches.match_date)}</p>
             <p>Time: {mp.matches.time_display || timeDisplay}</p>
             <p>Court: {mp.matches.court?.name ?? "TBD"}</p>
+            <p>Proposed by: {mp.matches.proposer ? `${mp.matches.proposer.first_name} ${mp.matches.proposer.last_name}` : "Manager"}</p>
 
             <p className="mt-3 font-medium">Players:</p>
             <ul className="ml-4 list-disc space-y-0.5">

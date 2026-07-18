@@ -50,15 +50,11 @@ export async function POST(request: Request) {
   // resulting match status.
   const { data: updatedMatch } = await admin
     .from("matches")
-    .select("*, court:courts(name, address), match_players(response_status, decline_reason, players(first_name, last_name, email, address, city, state, zip))")
+    .select("*, court:courts(name, address, latitude, longitude), proposer:players!proposed_by(first_name, last_name), match_players(response_status, decline_reason, players(first_name, last_name, email, address, city, state, zip))")
     .eq("id", mpRow.match_id)
     .single();
 
   if (!updatedMatch) return NextResponse.json({ ok: true });
-
-  // Fetch email test mode settings
-  const { data: settings } = await admin.from("club_settings").select("email_test_mode_send_to_first_only").single();
-  const sendToFirstOnly = settings?.email_test_mode_send_to_first_only === true;
 
   if (updatedMatch.status === "confirmed") {
     const playerNames = updatedMatch.match_players.map((mp: any) => mp.players ? `${mp.players.first_name} ${mp.players.last_name}` : 'Unknown');
@@ -70,16 +66,14 @@ export async function POST(request: Request) {
       timeDisplay,
       courtName: updatedMatch.court?.name ?? "Court TBD",
       playerNames,
+      courtAddress: updatedMatch.court?.address,
+      courtLatitude: updatedMatch.court?.latitude,
+      courtLongitude: updatedMatch.court?.longitude,
     });
     const icsBase64 = Buffer.from(ics).toString("base64");
 
-    let firstPlayerSent = false;
     for (const mp of updatedMatch.match_players) {
       if (!mp.players) continue;
-      
-      // If send_to_first_only is enabled, only send to the first player
-      if (sendToFirstOnly && firstPlayerSent) continue;
-      
       const teammates = playerNames.filter((n: string) => n !== `${mp.players.first_name} ${mp.players.last_name}`);
       const playerAddress = [mp.players.address, mp.players.city, mp.players.state, mp.players.zip]
         .filter(Boolean)
@@ -93,6 +87,9 @@ export async function POST(request: Request) {
         courtAddress: updatedMatch.court?.address ?? null,
         playerAddress,
         teammates,
+        proposedByName: updatedMatch.proposer
+          ? `${updatedMatch.proposer.first_name} ${updatedMatch.proposer.last_name}`
+          : "Manager",
       });
       await sendEmail({
         supabaseAdmin: admin,
@@ -101,20 +98,12 @@ export async function POST(request: Request) {
         html,
         attachments: [{ filename: "match.ics", content: icsBase64, content_type: "text/calendar; charset=utf-8; method=PUBLISH" }],
       });
-      
-      firstPlayerSent = true;
     }
   } else if (updatedMatch.status === "cancelled" && response === "declined") {
     const defaultTimeDisplay = await getDefaultTimeDisplay(admin);
     const timeDisplay = resolveTimeDisplay(updatedMatch, defaultTimeDisplay);
-    
-    let firstPlayerSent = false;
     for (const mp of updatedMatch.match_players) {
       if (!mp.players) continue;
-      
-      // If send_to_first_only is enabled, only send to the first player
-      if (sendToFirstOnly && firstPlayerSent) continue;
-      
       const { subject, html } = matchCancelledEmail({
         matchNumber: updatedMatch.match_number,
         firstName: mp.players.first_name,
@@ -122,10 +111,11 @@ export async function POST(request: Request) {
         timeSlot: timeDisplay,
         reason: "a player declined",
         declineReason: decline_reason || null,
+        proposedByName: updatedMatch.proposer
+          ? `${updatedMatch.proposer.first_name} ${updatedMatch.proposer.last_name}`
+          : "Manager",
       });
       await sendEmail({ supabaseAdmin: admin, to: mp.players.email, subject, html });
-      
-      firstPlayerSent = true;
     }
   }
 

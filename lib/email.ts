@@ -41,17 +41,13 @@ export async function sendEmail({
   // can be toggled without a Vercel redeploy.
   const { data: clubSettings } = await supabaseAdmin
     .from("club_settings")
-    .select("sandbox_mode, sandbox_email, email_test_mode_disable_emails")
+    .select("sandbox_mode, sandbox_email")
     .single();
   const sandboxOn = clubSettings?.sandbox_mode === true;
-  const disableEmails = clubSettings?.email_test_mode_disable_emails === true;
   const actualRecipient = sandboxOn && clubSettings?.sandbox_email ? clubSettings.sandbox_email : to;
   const actualSubject = sandboxOn ? `[TEST → ${to}] ${subject}` : subject;
 
-  // If emails are disabled, skip sending but still log
-  if (disableEmails) {
-    status = "skipped_emails_disabled";
-  } else if (!resend) {
+  if (!resend) {
     status = "skipped_no_api_key";
   } else {
     try {
@@ -119,6 +115,7 @@ export function matchProposedEmail({
   teammates,
   acceptUrl,
   conflictNote,
+  proposedByName,
 }: {
   matchNumber: number | string;
   firstName: string;
@@ -128,6 +125,7 @@ export function matchProposedEmail({
   teammates: string[];
   acceptUrl: string;
   conflictNote?: string | null;
+  proposedByName?: string | null;
 }) {
   const displayDate = formatShortDate(matchDate);
   return {
@@ -141,6 +139,7 @@ export function matchProposedEmail({
         <li><strong>Time:</strong> ${timeSlot}</li>
         <li><strong>Court:</strong> ${courtName}</li>
         <li><strong>Playing with:</strong> ${teammates.join(", ")}</li>
+        ${proposedByName ? `<li><strong>Proposed by:</strong> ${proposedByName}</li>` : ""}
       </ul>
       ${conflictNote ? `<p style="color:#b45309;"><strong>⚠️ Possible conflict:</strong> ${conflictNote}</p>` : ""}
       <p>Please accept or decline as soon as you can — the match will
@@ -156,12 +155,14 @@ export function matchNudgeEmail({
   matchDate,
   timeSlot,
   acceptUrl,
+  proposedByName,
 }: {
   matchNumber: number | string;
   firstName: string;
   matchDate: string;
   timeSlot: string;
   acceptUrl: string;
+  proposedByName?: string | null;
 }) {
   const displayDate = formatShortDate(matchDate);
   return {
@@ -171,6 +172,7 @@ export function matchNudgeEmail({
       <p>Just a reminder — you still have a proposed match, <strong>Match ID: M${matchNumber}</strong>,
       on <strong>${displayDate}</strong> (${timeSlot}) waiting on your response.
       It will be automatically cancelled if you don't respond in time.</p>
+      ${proposedByName ? `<p>Proposed by: ${proposedByName}</p>` : ""}
       <p><a href="${acceptUrl}">Respond now</a></p>
     `,
   };
@@ -191,6 +193,7 @@ export function matchConfirmedEmail({
   courtAddress,
   playerAddress,
   teammates,
+  proposedByName,
 }: {
   matchNumber: number | string;
   firstName: string;
@@ -200,6 +203,7 @@ export function matchConfirmedEmail({
   courtAddress?: string | null;
   playerAddress?: string | null;
   teammates: string[];
+  proposedByName?: string | null;
 }) {
   const displayDate = formatShortDate(matchDate);
   // Directions need a destination at minimum -- the court's address.
@@ -219,6 +223,7 @@ export function matchConfirmedEmail({
         <li><strong>Time:</strong> ${timeSlot}</li>
         <li><strong>Court:</strong> ${courtName}${courtAddress ? ` — ${courtAddress}` : ""}</li>
         <li><strong>Playing with:</strong> ${teammates.join(", ")}</li>
+        ${proposedByName ? `<li><strong>Proposed by:</strong> ${proposedByName}</li>` : ""}
       </ul>
       ${
         directionsUrl
@@ -237,6 +242,7 @@ export function matchCancelledEmail({
   timeSlot,
   reason,
   declineReason,
+  proposedByName,
 }: {
   matchNumber: number | string;
   firstName: string;
@@ -244,6 +250,7 @@ export function matchCancelledEmail({
   timeSlot: string;
   reason: string;
   declineReason?: string | null;
+  proposedByName?: string | null;
 }) {
   const displayDate = formatShortDate(matchDate);
   return {
@@ -253,6 +260,7 @@ export function matchCancelledEmail({
       <p>Your match, <strong>Match ID: M${matchNumber}</strong>, on <strong>${displayDate}</strong> (${timeSlot}) has been
       cancelled. Reason: ${reason}</p>
       ${declineReason ? `<p>Reason given: "${declineReason}"</p>` : ""}
+      ${proposedByName ? `<p>Proposed by: ${proposedByName}</p>` : ""}
       <p>Check your availability and matches page for updates.</p>
     `,
   };

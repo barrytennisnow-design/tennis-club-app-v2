@@ -39,7 +39,7 @@ export async function GET(request: Request) {
 
   const { data: proposedMatches } = await supabaseAdmin
     .from("matches")
-    .select("*, court:courts(name), match_players(id, response_status, players(first_name, email))")
+    .select("*, court:courts(name), proposer:players!proposed_by(first_name, last_name), match_players(id, response_status, players(first_name, email))")
     .eq("status", "proposed");
 
   const defaultTimeDisplay = await getDefaultTimeDisplay(supabaseAdmin);
@@ -68,6 +68,7 @@ export async function GET(request: Request) {
           matchDate: match.match_date,
           timeSlot: timeDisplay,
           reason: "not all players responded before the deadline",
+          proposedByName: match.proposer ? `${match.proposer.first_name} ${match.proposer.last_name}` : "Manager",
         });
         await sendEmail({ supabaseAdmin, to: mp.players.email, subject, html });
       }
@@ -92,6 +93,7 @@ export async function GET(request: Request) {
             matchDate: match.match_date,
             timeSlot: timeDisplay,
             acceptUrl: `${process.env.NEXT_PUBLIC_SITE_URL ?? ""}/matches`,
+            proposedByName: match.proposer ? `${match.proposer.first_name} ${match.proposer.last_name}` : "Manager",
           });
           await sendEmail({ supabaseAdmin, to: mp.players.email, subject, html });
         }

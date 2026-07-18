@@ -11,7 +11,7 @@ export async function POST(request: Request) {
   const supabase = createClient();
   const { data: userData } = await supabase.auth.getUser();
   if (!userData.user) return NextResponse.json({ error: "Not authenticated" }, { status: 401 });
-  const { data: me } = await supabase.from("players").select("id, role, permissions").eq("auth_user_id", userData.user.id).single();
+  const { data: me } = await supabase.from("players").select("id, first_name, last_name, role, permissions").eq("auth_user_id", userData.user.id).single();
   if (!me || !hasPermission(me, "matrix_propose_match")) return NextResponse.json({ error: "Not authorized" }, { status: 403 });
 
   const admin = createAdminClient();
@@ -35,9 +35,8 @@ export async function POST(request: Request) {
   // cancel" column, which the manager set going into each proposal
   // round. Nudge count always restarts at 0 for a newly-proposed
   // match; both stay manager-editable afterward on the Matches page.
-  const { data: settings } = await admin.from("club_settings").select("default_timeout_hours, email_test_mode_send_to_first_only").single();
+  const { data: settings } = await admin.from("club_settings").select("default_timeout_hours").single();
   const autoCancelHours = settings?.default_timeout_hours ?? 24;
-  const sendToFirstOnly = settings?.email_test_mode_send_to_first_only === true;
 
   const { error: updateError } = await admin
     .from("matches")
@@ -85,14 +84,9 @@ export async function POST(request: Request) {
   // is only offered once it's actually confirmed (see
   // respond-match/route.ts and the "Download Calendar Invite" button
   // on the player's Matches page).
-  let firstPlayerSent = false;
   for (const mp of match.match_players) {
     if (!mp.players) continue;
     if (mp.player_id === me.id) continue; // already auto-accepted above, no need to ask them to respond
-    
-    // If send_to_first_only is enabled, only send to the first player
-    if (sendToFirstOnly && firstPlayerSent) continue;
-    
     const teammates = match.match_players
       .filter((other: any) => other.player_id !== mp.player_id && other.players)
       .map((other: any) => `${other.players.first_name} ${other.players.last_name}`);
@@ -113,6 +107,7 @@ export async function POST(request: Request) {
       teammates,
       acceptUrl: `${siteUrl}/matches`,
       conflictNote,
+      proposedByName: `${me.first_name} ${me.last_name}`,
     });
 
     await sendEmail({
@@ -121,8 +116,6 @@ export async function POST(request: Request) {
       subject,
       html,
     });
-    
-    firstPlayerSent = true;
   }
 
   return NextResponse.json({ ok: true });

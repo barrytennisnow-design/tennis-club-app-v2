@@ -131,6 +131,7 @@ export async function POST(request: Request) {
       teammates,
       acceptUrl: `${siteUrl}/matches`,
       conflictNote,
+      proposedByName: `${me.first_name} ${me.last_name}`,
     });
     await sendEmail({ supabaseAdmin: admin, to: row.players.email, subject, html });
   }

@@ -17,7 +17,7 @@ export async function POST(request: Request) {
 
   const { data: match } = await admin
     .from("matches")
-    .select("*, match_players(players(first_name, email))")
+    .select("*, proposer:players!proposed_by(first_name, last_name), match_players(players(first_name, email))")
     .eq("id", match_id)
     .single();
 
@@ -45,6 +45,7 @@ export async function POST(request: Request) {
         matchDate: match.match_date,
         timeSlot: timeDisplay,
         reason: "cancelled by the manager",
+        proposedByName: match.proposer ? `${match.proposer.first_name} ${match.proposer.last_name}` : "Manager",
       });
       await sendEmail({ supabaseAdmin: admin, to: mp.players.email, subject, html });
     }
