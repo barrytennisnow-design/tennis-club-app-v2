@@ -34,16 +34,16 @@ function daysBetween(start: string, end: string) {
 // cycling through the set, NOT tied to status. "Unassigned" (available
 // but not yet in a match) always gets the light grey.
 const MATCH_PALETTE = [
-  "bg-[#FFE8D6]", // orange
-  "bg-[#D4EDDA]", // green
-  "bg-[#FFF3CD]", // yellow
-  "bg-[#D1ECF1]", // blue
-  "bg-[#F8D7DA]", // red
-  "bg-[#E5D4ED]", // purple
-  "bg-[#FFD8E8]", // pink
-  "bg-[#D6F5E8]", // teal
-  "bg-[#E8E0D0]", // tan
-  "bg-[#DCE4F5]", // periwinkle
+  "bg-[#D4EDDA]", // 1st match of the day -- light green
+  "bg-[#FFF3CD]", // 2nd -- light yellow
+  "bg-[#F8D7DA]", // 3rd -- light red
+  "bg-[#D1ECF1]", // 4th -- light blue
+  "bg-[#E5D4ED]", // 5th -- light purple
+  "bg-[#8FD19E]", // 6th -- medium green
+  "bg-[#FFE066]", // 7th -- medium yellow
+  "bg-[#F1959B]", // 8th -- medium red
+  "bg-[#8FCCE0]", // 9th -- medium blue
+  "bg-[#C4A0D9]", // 10th -- medium purple
 ];
 const UNASSIGNED_COLOR = "bg-[#F8F9FA]";
 
