@@ -47,6 +47,14 @@ export async function middleware(request: NextRequest) {
   const { data: { user } } = await supabase.auth.getUser();
   if (user) return response; // already logged in as someone -- never override a real session
 
+  // Guard against retrying on every single page load if the session
+  // somehow isn't sticking (e.g. a cookie-propagation edge case) --
+  // without this, a broken loop here would hammer Supabase's own
+  // magic-link rate limit for the manager's email, which could then
+  // make REAL login attempts for that same email fail too.
+  const recentAttemptCookie = request.cookies.get("auto_login_attempted");
+  if (recentAttemptCookie) return response;
+
   const admin = createSupabaseClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
     process.env.SUPABASE_SERVICE_ROLE_KEY!,
@@ -77,9 +85,14 @@ export async function middleware(request: NextRequest) {
 
   // Verifying through the REQUEST-scoped `supabase` client (not the
   // admin client) is what makes the `set` callback above fire and
-  // actually attach real session cookies to `response`.
+  // actually attach real session cookies to `response`. Note this
+  // reassigns `response` to a new object each time it fires -- which
+  // is exactly why the guard cookie below is set LAST, on whatever
+  // `response` ends up being, rather than earlier (an earlier
+  // attempt at this got silently wiped out by that reassignment).
   await supabase.auth.verifyOtp({ email: manager.email, token, type: "email" });
 
+  response.cookies.set("auto_login_attempted", "1", { maxAge: 30, path: "/" });
   return response;
 }
 

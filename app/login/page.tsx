@@ -7,6 +7,7 @@ export default function LoginPage() {
   const supabase = createClient();
   const [email, setEmail] = useState("");
   const [status, setStatus] = useState<"idle" | "sending" | "sent" | "error">("idle");
+  const [errorMsg, setErrorMsg] = useState("");
   const [code, setCode] = useState("");
   const [codeStatus, setCodeStatus] = useState<"idle" | "verifying" | "error">("idle");
 
@@ -19,6 +20,7 @@ export default function LoginPage() {
         emailRedirectTo: `${process.env.NEXT_PUBLIC_SITE_URL}/auth/callback?next=/matches`,
       },
     });
+    setErrorMsg(error?.message ?? "");
     setStatus(error ? "error" : "sent");
   }
 
@@ -93,7 +95,7 @@ export default function LoginPage() {
         {status === "sending" ? "Sending..." : "Send login link"}
       </button>
       {status === "error" && (
-        <p className="text-red-600">Something went wrong — try again.</p>
+        <p className="text-red-600">{errorMsg || "Something went wrong — try again."}</p>
       )}
     </form>
   );
