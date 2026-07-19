@@ -4,6 +4,7 @@ import { sendEmail, matchConfirmedEmail, matchCancelledEmail } from "@/lib/email
 import { getEmailTestModeSettings, applyFirstOnlyFilter } from "@/lib/emailTestMode";
 import { buildMatchIcs } from "@/lib/ics";
 import { getDefaultTimeDisplay, resolveTimeDisplay } from "@/lib/timeDisplay";
+import { notifyPlayer } from "@/lib/notifications";
 
 export async function POST(request: Request) {
   const { match_player_id, response, decline_reason } = await request.json();
@@ -51,7 +52,7 @@ export async function POST(request: Request) {
   // resulting match status.
   const { data: updatedMatch, error: updatedMatchError } = await admin
     .from("matches")
-    .select("*, court:courts(name, address), proposer:players!proposed_by(first_name, last_name), match_players(id, response_status, decline_reason, created_at, players(first_name, last_name, email, phone, address, city, state, zip))")
+    .select("*, court:courts(name, address), proposer:players!proposed_by(first_name, last_name), match_players(id, player_id, response_status, decline_reason, created_at, players(first_name, last_name, email, phone, address, city, state, zip))")
     .eq("id", mpRow.match_id)
     .single();
 
@@ -127,6 +128,14 @@ export async function POST(request: Request) {
         html,
         attachments: [{ filename: "match.ics", content: icsBase64, content_type: "text/calendar; charset=utf-8; method=PUBLISH" }],
       });
+      await notifyPlayer({
+        admin,
+        playerId: mp.player_id,
+        type: "match_confirmed",
+        title: subject,
+        body: "Everyone accepted -- tap for details and directions.",
+        matchId: mpRow.match_id,
+      });
     }
   } else if (updatedMatch.status === "cancelled" && response === "declined") {
     const defaultTimeDisplay = await getDefaultTimeDisplay(admin);
@@ -159,6 +168,14 @@ export async function POST(request: Request) {
           : "Manager",
       });
       await sendEmail({ supabaseAdmin: admin, to: mp.players.email, subject, html });
+      await notifyPlayer({
+        admin,
+        playerId: mp.player_id,
+        type: "match_cancelled",
+        title: subject,
+        body: "A player declined -- the match was cancelled.",
+        matchId: mpRow.match_id,
+      });
     }
   }
 

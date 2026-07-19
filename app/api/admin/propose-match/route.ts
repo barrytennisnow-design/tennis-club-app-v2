@@ -5,6 +5,7 @@ import { getEmailTestModeSettings, applyFirstOnlyFilter } from "@/lib/emailTestM
 import { getDefaultTimeDisplay, resolveTimeDisplay } from "@/lib/timeDisplay";
 import { checkSameDayConflict } from "@/lib/conflict";
 import { hasPermission } from "@/lib/permissions";
+import { notifyPlayer } from "@/lib/notifications";
 
 export async function POST(request: Request) {
   const { match_id } = await request.json();
@@ -144,6 +145,14 @@ export async function POST(request: Request) {
       to: mp.players.email,
       subject,
       html,
+    });
+    await notifyPlayer({
+      admin,
+      playerId: mp.player_id,
+      type: "match_proposed",
+      title: subject,
+      body: "Tap to view the match and respond.",
+      matchId: match_id,
     });
   }
 

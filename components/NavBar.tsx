@@ -15,6 +15,7 @@ export default function NavBar() {
   const [isCaptain, setIsCaptain] = useState(false);
   const [loggedIn, setLoggedIn] = useState(false);
   const [selfServeOptIn, setSelfServeOptIn] = useState(false);
+  const [unreadCount, setUnreadCount] = useState(0);
 
   useEffect(() => {
     (async () => {
@@ -23,12 +24,29 @@ export default function NavBar() {
       setLoggedIn(true);
       const { data: me } = await supabase
         .from("players")
-        .select("role, self_serve_opt_in")
+        .select("id, role, self_serve_opt_in")
         .eq("auth_user_id", userData.user.id)
         .maybeSingle();
       if (me?.role === "manager") setIsManager(true);
       if (me?.role === "captain") setIsCaptain(true);
       setSelfServeOptIn(!!me?.self_serve_opt_in);
+
+      if (me?.id) {
+        const refreshUnread = async () => {
+          const { count } = await supabase
+            .from("notifications")
+            .select("id", { count: "exact", head: true })
+            .eq("player_id", me.id)
+            .is("read_at", null);
+          setUnreadCount(count ?? 0);
+        };
+        refreshUnread();
+        // Lightweight polling rather than a realtime subscription --
+        // good enough for a badge count, and avoids holding a socket
+        // open on every page for something this low-stakes.
+        const interval = setInterval(refreshUnread, 60000);
+        return () => clearInterval(interval);
+      }
     })();
   }, []);
 
@@ -81,6 +99,14 @@ export default function NavBar() {
         <div className="border-t border-stone-100">
           <nav className="mx-auto flex max-w-6xl flex-nowrap items-center gap-x-4 overflow-x-auto whitespace-nowrap px-4 py-2 text-sm">
             <Link href="/matches" className={linkClass("/matches")}>My Matches</Link>
+            <Link href="/notifications" className={linkClass("/notifications")}>
+              Notifications
+              {unreadCount > 0 && (
+                <span className="ml-1 rounded-full bg-court-green px-1.5 py-0.5 text-[10px] font-semibold text-white">
+                  {unreadCount}
+                </span>
+              )}
+            </Link>
             {selfServeOptIn && <Link href="/matches/build" className={linkClass("/matches/build")}>Build a Match</Link>}
             <Link href="/availability" className={linkClass("/availability")}>Availability</Link>
             <Link href="/profile" className={linkClass("/profile")}>Profile</Link>

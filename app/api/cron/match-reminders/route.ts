@@ -17,6 +17,7 @@ import { createAdminClient } from "@/lib/supabaseServer";
 import { sendEmail, matchNudgeEmail, matchCancelledEmail } from "@/lib/email";
 import { getEmailTestModeSettings, applyFirstOnlyFilter } from "@/lib/emailTestMode";
 import { getDefaultTimeDisplay, resolveTimeDisplay } from "@/lib/timeDisplay";
+import { notifyPlayer } from "@/lib/notifications";
 
 export async function GET(request: Request) {
   const authHeader = request.headers.get("authorization");
@@ -40,7 +41,7 @@ export async function GET(request: Request) {
 
   const { data: proposedMatches } = await supabaseAdmin
     .from("matches")
-    .select("*, court:courts(name), proposer:players!proposed_by(first_name, last_name), match_players(id, response_status, created_at, players(first_name, last_name, email, phone, access_token))")
+    .select("*, court:courts(name), proposer:players!proposed_by(first_name, last_name), match_players(id, player_id, response_status, created_at, players(first_name, last_name, email, phone, access_token))")
     .eq("status", "proposed");
 
   const defaultTimeDisplay = await getDefaultTimeDisplay(supabaseAdmin);
@@ -86,6 +87,14 @@ export async function GET(request: Request) {
           proposedByName: match.proposer ? `${match.proposer.first_name} ${match.proposer.last_name}` : "Manager",
         });
         await sendEmail({ supabaseAdmin, to: mp.players.email, subject, html });
+        await notifyPlayer({
+          admin: supabaseAdmin,
+          playerId: mp.player_id,
+          type: "match_cancelled",
+          title: subject,
+          body: "Not everyone responded before the deadline.",
+          matchId: match.id,
+        });
       }
       cancelled++;
       continue;
@@ -119,6 +128,14 @@ export async function GET(request: Request) {
             proposedByName: match.proposer ? `${match.proposer.first_name} ${match.proposer.last_name}` : "Manager",
           });
           await sendEmail({ supabaseAdmin, to: mp.players.email, subject, html });
+          await notifyPlayer({
+            admin: supabaseAdmin,
+            playerId: mp.player_id,
+            type: "match_reminder",
+            title: subject,
+            body: "You haven't responded yet -- tap to accept or decline.",
+            matchId: match.id,
+          });
         }
         await supabaseAdmin
           .from("matches")

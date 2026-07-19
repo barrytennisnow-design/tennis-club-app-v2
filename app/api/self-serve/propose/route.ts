@@ -15,6 +15,7 @@ import { getDefaultTimeDisplay, resolveTimeDisplay } from "@/lib/timeDisplay";
 import { checkSameDayConflict } from "@/lib/conflict";
 import { getSelfServeWindowDays, isWithinSelfServeWindow, getAssignedPlayerIds } from "@/lib/selfServe";
 import { getNextMatchNumber } from "@/lib/matching";
+import { notifyPlayer } from "@/lib/notifications";
 
 export async function POST(request: Request) {
   const { date, court_id, time_display, player_ids } = await request.json();
@@ -168,6 +169,14 @@ export async function POST(request: Request) {
       proposedByName: `${me.first_name} ${me.last_name}`,
     });
     await sendEmail({ supabaseAdmin: admin, to: player.email, subject, html });
+    await notifyPlayer({
+      admin,
+      playerId: pid,
+      type: "match_proposed",
+      title: subject,
+      body: "Tap to view the match and respond.",
+      matchId: newMatch.id,
+    });
   }
 
   return NextResponse.json({ ok: true, matchNumber });

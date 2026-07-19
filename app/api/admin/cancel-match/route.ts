@@ -4,6 +4,7 @@ import { sendEmail, matchCancelledEmail } from "@/lib/email";
 import { getEmailTestModeSettings, applyFirstOnlyFilter } from "@/lib/emailTestMode";
 import { getDefaultTimeDisplay, resolveTimeDisplay } from "@/lib/timeDisplay";
 import { hasPermission } from "@/lib/permissions";
+import { notifyPlayer } from "@/lib/notifications";
 
 export async function POST(request: Request) {
   const { match_id } = await request.json();
@@ -18,7 +19,7 @@ export async function POST(request: Request) {
 
   const { data: match } = await admin
     .from("matches")
-    .select("*, court:courts(name), proposer:players!proposed_by(first_name, last_name), match_players(response_status, players(first_name, last_name, email, phone), created_at)")
+    .select("*, court:courts(name), proposer:players!proposed_by(first_name, last_name), match_players(player_id, response_status, players(first_name, last_name, email, phone), created_at)")
     .eq("id", match_id)
     .single();
 
@@ -63,6 +64,14 @@ export async function POST(request: Request) {
         proposedByName: match.proposer ? `${match.proposer.first_name} ${match.proposer.last_name}` : "Manager",
       });
       await sendEmail({ supabaseAdmin: admin, to: mp.players.email, subject, html });
+      await notifyPlayer({
+        admin,
+        playerId: mp.player_id,
+        type: "match_cancelled",
+        title: subject,
+        body: "Cancelled by the manager.",
+        matchId: match_id,
+      });
     }
   }
 
