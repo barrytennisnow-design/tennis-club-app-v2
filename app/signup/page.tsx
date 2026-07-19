@@ -91,8 +91,7 @@ export default function SignupPage() {
         </div>
         <div className="space-y-2 rounded-md border border-stone-200 p-4">
           <p className="text-sm text-stone-600">
-            Opening the email on a <strong>different device</strong> than the one you signed up on?
-            The link won't work there -- instead, enter the 6-digit code from that same email:
+            Or enter the 6-digit code from that same email:
           </p>
           <form onSubmit={handleVerifyCode} className="flex gap-2">
             <input
