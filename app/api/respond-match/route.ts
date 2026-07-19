@@ -51,7 +51,7 @@ export async function POST(request: Request) {
   // resulting match status.
   const { data: updatedMatch, error: updatedMatchError } = await admin
     .from("matches")
-    .select("*, court:courts(name, address), proposer:players!proposed_by(first_name, last_name), match_players(response_status, decline_reason, created_at, players(first_name, last_name, email, phone, address, city, state, zip))")
+    .select("*, court:courts(name, address), proposer:players!proposed_by(first_name, last_name), match_players(id, response_status, decline_reason, created_at, players(first_name, last_name, email, phone, address, city, state, zip))")
     .eq("id", mpRow.match_id)
     .single();
 
@@ -87,6 +87,7 @@ export async function POST(request: Request) {
       proposedByName,
     });
     const icsBase64 = Buffer.from(ics).toString("base64");
+    const siteUrl = process.env.NEXT_PUBLIC_SITE_URL ?? "";
 
     const testMode = await getEmailTestModeSettings(admin);
     const sortedMatchPlayers = [...updatedMatch.match_players].sort(
@@ -99,6 +100,13 @@ export async function POST(request: Request) {
       const playerAddress = [mp.players.address, mp.players.city, mp.players.state, mp.players.zip]
         .filter(Boolean)
         .join(", ") || null;
+      // Same match_player_id credential the "Download Calendar Invite"
+      // button on the My Matches page already uses -- works without a
+      // login session, same as that button, so it's a real one-tap
+      // download for anyone whose email client doesn't auto-detect
+      // the .ics attachment (Gmail's own "Add to Calendar" smart card
+      // is separate, client-side behavior we don't control).
+      const icsDownloadUrl = mp.id ? `${siteUrl}/api/ics/${mp.id}` : null;
       const { subject, html } = matchConfirmedEmail({
         matchNumber: updatedMatch.match_number,
         firstName: mp.players.first_name,
@@ -110,6 +118,7 @@ export async function POST(request: Request) {
         roster,
         confirmedAt,
         proposedByName,
+        icsDownloadUrl,
       });
       await sendEmail({
         supabaseAdmin: admin,

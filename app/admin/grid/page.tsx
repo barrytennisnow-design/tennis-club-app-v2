@@ -73,6 +73,8 @@ export default function MatchMatrixPage() {
   const [editingMatch, setEditingMatch] = useState<{ matchId: string; field: 'court' | 'time' } | null>(null);
   const [tempCourt, setTempCourt] = useState<string>("");
   const [tempTime, setTempTime] = useState<string>("");
+  const [testEmailBusy, setTestEmailBusy] = useState<string | null>(null);
+  const [testEmailResult, setTestEmailResult] = useState<string | null>(null);
   const days = daysBetween(viewStart, viewEnd);
 
   // Colors are assigned PER DAY, not globally by match_number -- two
@@ -356,9 +358,26 @@ export default function MatchMatrixPage() {
     load();
   }
 
+  async function handleSendTestEmail(kind: "proposed" | "confirmed" | "cancelled") {
+    if (!selectedMatch) return;
+    setTestEmailBusy(kind);
+    setTestEmailResult(null);
+    const res = await fetch("/api/admin/send-test-email", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ match_id: selectedMatch.id, kind }),
+    });
+    const json = await res.json();
+    setTestEmailBusy(null);
+    setTestEmailResult(json.ok ? `Test email sent to ${json.sentTo}` : `Error: ${json.error}`);
+  }
+
   function handleCellClick(playerId: string, date: string, hasMatch: any, isUnassigned: boolean) {
     if (!swapMode) {
-      if (hasMatch) setSelected(selected?.playerId === playerId && selected?.date === date ? null : { playerId, date });
+      if (hasMatch) {
+        setSelected(selected?.playerId === playerId && selected?.date === date ? null : { playerId, date });
+        setTestEmailResult(null);
+      }
       return;
     }
     // Swap mode: only draft-match players or Unassigned cells are eligible.
@@ -691,6 +710,36 @@ export default function MatchMatrixPage() {
               className="w-full rounded border border-red-300 px-2 py-1 text-red-700 disabled:opacity-40">
               Cancel match
             </button>
+          )}
+
+          {access.role === "manager" && (
+            <div className="mt-2 space-y-1 border-t pt-2">
+              <p className="text-xs font-semibold text-stone-500">Send test email (to you only, not real players):</p>
+              <div className="flex flex-wrap gap-1">
+                <button
+                  onClick={() => handleSendTestEmail("proposed")}
+                  disabled={testEmailBusy !== null}
+                  className="rounded border border-stone-300 px-2 py-0.5 text-xs disabled:opacity-40 hover:bg-stone-100"
+                >
+                  {testEmailBusy === "proposed" ? "Sending..." : "Test: Proposed"}
+                </button>
+                <button
+                  onClick={() => handleSendTestEmail("confirmed")}
+                  disabled={testEmailBusy !== null}
+                  className="rounded border border-stone-300 px-2 py-0.5 text-xs disabled:opacity-40 hover:bg-stone-100"
+                >
+                  {testEmailBusy === "confirmed" ? "Sending..." : "Test: Confirmed"}
+                </button>
+                <button
+                  onClick={() => handleSendTestEmail("cancelled")}
+                  disabled={testEmailBusy !== null}
+                  className="rounded border border-stone-300 px-2 py-0.5 text-xs disabled:opacity-40 hover:bg-stone-100"
+                >
+                  {testEmailBusy === "cancelled" ? "Sending..." : "Test: Cancelled"}
+                </button>
+              </div>
+              {testEmailResult && <p className="text-xs text-stone-500">{testEmailResult}</p>}
+            </div>
           )}
         </div>
       )}

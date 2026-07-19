@@ -40,6 +40,39 @@ function escapeIcs(text: string) {
   return text.replace(/([,;])/g, "\\$1").replace(/\n/g, "\\n");
 }
 
+// RFC 5545 requires that no content line be longer than 75 octets.
+// Longer lines must be "folded": break at the 75-octet boundary with
+// a CRLF followed by a single leading space, which the reader is
+// required to strip back out. Apple Calendar/Mail tolerate long
+// unfolded lines and just work anyway -- which is exactly why this
+// went unnoticed on iPhone -- but Google Calendar's parser follows
+// the spec strictly and silently drops any event containing one,
+// which is what broke "Add to Google Calendar" once DESCRIPTION
+// started carrying the full match-details block instead of a short
+// summary. Folding here (byte-safe, so a multi-byte UTF-8 character
+// is never split across the break) fixes Google Calendar without
+// changing anything Apple Calendar shows.
+function foldIcsLine(line: string): string {
+  const bytes = Buffer.from(line, "utf8");
+  if (bytes.length <= 75) return line;
+
+  const chunks: string[] = [];
+  let start = 0;
+  let limit = 75; // first line gets the full 75 octets
+  while (start < bytes.length) {
+    let end = Math.min(start + limit, bytes.length);
+    // Don't split in the middle of a multi-byte UTF-8 character:
+    // continuation bytes look like 10xxxxxx (0x80-0xBF).
+    while (end < bytes.length && end > start && (bytes[end] & 0xc0) === 0x80) {
+      end--;
+    }
+    chunks.push(bytes.slice(start, end).toString("utf8"));
+    start = end;
+    limit = 74; // subsequent lines: 75 octets total including the 1-space continuation prefix
+  }
+  return chunks.join("\r\n ");
+}
+
 export function buildMatchIcs({
   matchId,
   matchNumber,
@@ -143,7 +176,9 @@ export function buildMatchIcs({
     "END:VALARM",
     "END:VEVENT",
     "END:VCALENDAR",
-  ].join("\r\n");
+  ]
+    .map(foldIcsLine)
+    .join("\r\n");
 
   return ics;
 }

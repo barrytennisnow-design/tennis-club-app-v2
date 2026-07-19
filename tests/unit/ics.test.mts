@@ -2,6 +2,18 @@ import { test, describe } from "node:test";
 import assert from "node:assert/strict";
 import { buildMatchIcs } from "../../lib/ics.ts";
 
+// RFC 5545 line folding inserts "\r\n " (CRLF + a single leading
+// space) into any content line over 75 octets -- DESCRIPTION always
+// qualifies. Per the same spec, a reader is required to remove
+// exactly that sequence to reconstruct the original content, so
+// content-matching assertions below unfold first. Structural
+// assertions (BEGIN/END markers, property-to-property CRLFs) stay on
+// the raw string since those lines are always short enough to never
+// be folded.
+function unfold(ics: string): string {
+  return ics.replace(/\r\n[ \t]/g, "");
+}
+
 const baseArgs = {
   matchId: "abc-123",
   matchNumber: 7,
@@ -64,7 +76,7 @@ describe("buildMatchIcs", () => {
   });
 
   test("escapes commas in player names so the ICS format isn't corrupted", () => {
-    const ics = buildMatchIcs({ ...baseArgs, playerNames: ["Smith, Jr., John"] });
+    const ics = unfold(buildMatchIcs({ ...baseArgs, playerNames: ["Smith, Jr., John"] }));
     // A raw unescaped comma would break the DESCRIPTION field's structure.
     // Periods correctly do NOT need escaping in ICS -- only , ; and newlines do.
     assert.match(ics, /Smith\\, Jr\.\\, John/);
@@ -78,7 +90,7 @@ describe("buildMatchIcs", () => {
   });
 
   test("DESCRIPTION uses the standardized match-details block (Match ID header, CONFIRMED status)", () => {
-    const ics = buildMatchIcs(baseArgs);
+    const ics = unfold(buildMatchIcs(baseArgs));
     assert.match(ics, /DESCRIPTION:Match ID: M7 CONFIRMED\\n/);
     assert.match(ics, /Date: Thursday\\, 7-16-26\\n/);
     assert.match(ics, /Court: Langford 1\\n/);
@@ -86,19 +98,19 @@ describe("buildMatchIcs", () => {
   });
 
   test("DESCRIPTION lists each roster player's status and phone when a roster is provided", () => {
-    const ics = buildMatchIcs({
+    const ics = unfold(buildMatchIcs({
       ...baseArgs,
       roster: [
         { name: "Alice Anderson", status: "accepted", phone: "7729248587" },
         { name: "Bob Brown", status: "proposed", phone: null },
       ],
-    });
+    }));
     assert.match(ics, /Alice Anderson.*Status: ACCEPTED \| Phone: \(772\) 924-8587/);
     assert.match(ics, /Bob Brown.*Status: PROPOSED(?!.*Phone)/);
   });
 
   test("DESCRIPTION falls back to ACCEPTED status per playerNames when no roster is given", () => {
-    const ics = buildMatchIcs(baseArgs);
+    const ics = unfold(buildMatchIcs(baseArgs));
     assert.match(ics, /Alice Anderson.*Status: ACCEPTED/);
   });
 
@@ -110,6 +122,29 @@ describe("buildMatchIcs", () => {
     });
     assert.match(ics, /Confirmed: /);
     assert.match(ics, /match created by: Barry Richman/);
+  });
+
+  test("no content line exceeds RFC 5545's 75-octet limit -- this is what broke Google Calendar import while iPhone kept working", () => {
+    const ics = buildMatchIcs({
+      ...baseArgs,
+      courtAddress: "123 Court Rd, Some City, FL",
+      confirmedAt: "2026-07-15T11:04:43-04:00",
+      proposedByName: "Barry Richman",
+      roster: [
+        { name: "Alice Anderson", status: "accepted", phone: "7729248587" },
+        { name: "Bob Brown", status: "accepted", phone: "5551234567" },
+      ],
+    });
+    for (const rawLine of ics.split("\r\n")) {
+      // A continuation line (starts with a space) is itself always
+      // exactly at or under the fold width by construction; only
+      // flag the start of a genuinely oversized, unfolded line.
+      if (rawLine.startsWith(" ")) continue;
+      assert.ok(
+        Buffer.byteLength(rawLine, "utf8") <= 75,
+        `line exceeds 75 octets and needs folding: ${JSON.stringify(rawLine)}`
+      );
+    }
   });
 
   test("LOCATION includes the court address when provided, not just the court name", () => {

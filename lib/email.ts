@@ -204,6 +204,7 @@ export function matchConfirmedEmail({
   roster,
   confirmedAt,
   proposedByName,
+  icsDownloadUrl,
 }: {
   matchNumber: number | string;
   firstName: string;
@@ -215,6 +216,7 @@ export function matchConfirmedEmail({
   roster: RosterEntry[];
   confirmedAt: string;
   proposedByName?: string | null;
+  icsDownloadUrl?: string | null;
 }) {
   const displayDate = formatShortDate(matchDate);
   // Directions need a destination at minimum -- the court's address.
@@ -235,6 +237,7 @@ export function matchConfirmedEmail({
       `match created by: ${proposedByName ?? "Manager"}`,
     ],
   });
+  const buttonStyle = "display:inline-block;padding:8px 16px;background:#2d5a3d;color:#ffffff;border-radius:6px;text-decoration:none;margin-right:8px;margin-bottom:8px;";
   return {
     subject: `Confirmed: your match on ${displayDate}`,
     html: `
@@ -242,11 +245,13 @@ export function matchConfirmedEmail({
       <p>Everyone accepted — your match is confirmed! 🎾</p>
       <pre style="font-family:monospace;white-space:pre-wrap;font-size:13px;">${details}</pre>
       ${
-        directionsUrl
-          ? `<p><a href="${directionsUrl}" style="display:inline-block;padding:8px 16px;background:#2d5a3d;color:#ffffff;border-radius:6px;text-decoration:none;">Get Directions</a></p>`
+        directionsUrl || icsDownloadUrl
+          ? `<p>${directionsUrl ? `<a href="${directionsUrl}" style="${buttonStyle}">Get Directions</a>` : ""}${
+              icsDownloadUrl ? `<a href="${icsDownloadUrl}" style="${buttonStyle}">Download Calendar (.ics)</a>` : ""
+            }</p>`
           : ""
       }
-      <p>A calendar invite is attached — tap it to add this to your calendar.</p>
+      <p>A calendar invite is also attached — tap it to add this to your calendar.</p>
     `,
   };
 }
