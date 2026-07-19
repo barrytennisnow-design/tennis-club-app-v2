@@ -92,7 +92,7 @@ export async function middleware(request: NextRequest) {
   // attempt at this got silently wiped out by that reassignment).
   await supabase.auth.verifyOtp({ email: manager.email, token, type: "email" });
 
-  response.cookies.set("auto_login_attempted", "1", { maxAge: 30, path: "/" });
+  response.cookies.set("auto_login_attempted", "1", { maxAge: 60, path: "/" });
   return response;
 }
 
