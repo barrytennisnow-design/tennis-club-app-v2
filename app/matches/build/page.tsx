@@ -64,13 +64,13 @@ export default function BuildMatchPage() {
   function togglePlayer(id: string) {
     setSelectedPlayerIds((prev) => {
       if (prev.includes(id)) return prev.filter((x) => x !== id);
-      if (prev.length >= 5) return prev; // max group size is 6 (you + 5 others)
+      if (prev.length >= 3) return prev; // max group size is 4 (you + 3 others) -- but only 1 or 3 others is actually valid, see submit()
       return [...prev, id];
     });
   }
 
   async function submit() {
-    if (!selectedDate || selectedPlayerIds.length < 1 || selectedPlayerIds.length > 5 || !courtId) return;
+    if (!selectedDate || (selectedPlayerIds.length !== 1 && selectedPlayerIds.length !== 3) || !courtId) return;
     setSubmitting(true);
     setError(null);
     const time_display = timeChoice === "__default__" ? null : timeChoice;
@@ -110,7 +110,7 @@ export default function BuildMatchPage() {
       <h1 className="text-xl font-bold">Build Your Own Match</h1>
       <p className="text-sm text-stone-600">
         These are your available, unassigned days that are close enough now to build a match yourself.
-        Pick a day, choose 1 to 5 other open players (2-6 people total including you), set a court
+        Pick a day, choose 1 or 3 other open players (2 or 4 people total including you), set a court
         and time, and propose — you're auto-accepted since you're the one proposing, but everyone
         else still needs to accept, same as any other match. If two people try to grab the same
         player or day at once, whoever submits first gets it — the other will be asked to pick again.
@@ -148,8 +148,13 @@ export default function BuildMatchPage() {
 
           <div>
             <p className="mb-2 text-sm font-medium">
-              Pick 1 to 5 other players ({selectedPlayerIds.length} selected, {selectedPlayerIds.length + 1} total):
+              Pick 1 or 3 other players ({selectedPlayerIds.length} selected, {selectedPlayerIds.length + 1} total):
             </p>
+            {selectedPlayerIds.length === 2 && (
+              <p className="mb-2 text-sm text-amber-700">
+                2 others isn't a valid match size here — remove one to propose a 2-person match, or add one more for a 4-person match.
+              </p>
+            )}
             {playersLoading && <p className="text-sm text-stone-500">Loading...</p>}
             {!playersLoading && openPlayers.length === 0 && (
               <p className="text-sm text-stone-500">No one else is open that day right now.</p>
@@ -190,7 +195,7 @@ export default function BuildMatchPage() {
 
           <button
             onClick={submit}
-            disabled={submitting || selectedPlayerIds.length < 1 || !courtId}
+            disabled={submitting || (selectedPlayerIds.length !== 1 && selectedPlayerIds.length !== 3) || !courtId}
             className="rounded-md bg-court-green px-4 py-2 text-sm text-white disabled:opacity-50"
           >
             {submitting ? "Proposing..." : `Propose This Match (${selectedPlayerIds.length + 1} players)`}

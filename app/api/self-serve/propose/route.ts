@@ -1,11 +1,12 @@
 // Creates a self-serve match: re-validates everything server-side,
 // auto-accepts the proposer, proposes to everyone else picked (group
-// size 2-6 total, i.e. 1-5 other players) through the exact same
-// pipeline as a manager-proposed match. Conflicts (someone else
-// grabbing the same date/player between page-load and submit) are
-// handled first-to-propose: whichever request's re-validation runs
-// first and passes wins the insert; anyone after that gets a 409
-// telling them to pick again with the now-current list.
+// size is exactly 2 or 4 total, i.e. exactly 1 or 3 other players --
+// no other sizes allowed) through the exact same pipeline as a
+// manager-proposed match. Conflicts (someone else grabbing the same
+// date/player between page-load and submit) are handled first-to-
+// propose: whichever request's re-validation runs first and passes
+// wins the insert; anyone after that gets a 409 telling them to pick
+// again with the now-current list.
 import { NextResponse } from "next/server";
 import { createClient, createAdminClient } from "@/lib/supabaseServer";
 import { sendEmail, matchProposedEmail } from "@/lib/email";
@@ -18,8 +19,8 @@ import { getNextMatchNumber } from "@/lib/matching";
 export async function POST(request: Request) {
   const { date, court_id, time_display, player_ids } = await request.json();
 
-  if (!date || !court_id || !Array.isArray(player_ids) || player_ids.length < 1 || player_ids.length > 5) {
-    return NextResponse.json({ error: "A date, court, and 1 to 5 other players are required (2-6 players total)" }, { status: 400 });
+  if (!date || !court_id || !Array.isArray(player_ids) || (player_ids.length !== 1 && player_ids.length !== 3)) {
+    return NextResponse.json({ error: "A date, court, and exactly 1 or 3 other players are required (2 or 4 players total)" }, { status: 400 });
   }
   if (new Set(player_ids).size !== player_ids.length) {
     return NextResponse.json({ error: "Duplicate players selected" }, { status: 400 });
