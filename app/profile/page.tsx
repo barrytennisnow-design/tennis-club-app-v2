@@ -12,6 +12,37 @@ export default function ProfilePage() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
+  const [passkeySupported, setPasskeySupported] = useState(false);
+  const [passkeys, setPasskeys] = useState<any[]>([]);
+  const [passkeyStatus, setPasskeyStatus] = useState<"idle" | "registering" | "error">("idle");
+  const [passkeyError, setPasskeyError] = useState("");
+
+  async function loadPasskeys() {
+    const { data } = await supabase.auth.passkey.list();
+    setPasskeys(data ?? []);
+  }
+
+  useEffect(() => {
+    setPasskeySupported(typeof window !== "undefined" && !!window.PublicKeyCredential);
+  }, []);
+
+  async function handleRegisterPasskey() {
+    setPasskeyStatus("registering");
+    setPasskeyError("");
+    const { error } = await supabase.auth.registerPasskey();
+    if (error) {
+      setPasskeyStatus("error");
+      setPasskeyError(error.message);
+      return;
+    }
+    setPasskeyStatus("idle");
+    loadPasskeys();
+  }
+
+  async function handleDeletePasskey(passkeyId: string) {
+    await supabase.auth.passkey.delete({ passkeyId });
+    loadPasskeys();
+  }
 
   useEffect(() => {
     (async () => {
@@ -27,6 +58,7 @@ export default function ProfilePage() {
         .single();
       setPlayer(data);
       setLoading(false);
+      loadPasskeys();
     })();
   }, []);
 
@@ -174,6 +206,48 @@ export default function ProfilePage() {
             Go to your 30-day availability →
           </a>
         </p>
+      )}
+
+      {passkeySupported && (
+        <div className="space-y-3 rounded-md border border-court-green/30 bg-court-green/5 p-4">
+          <div>
+            <p className="font-medium">🔒 Faster login</p>
+            <p className="text-sm text-stone-600">
+              Set up a passkey so you can log in on this device with Face ID, fingerprint, or your
+              device PIN instead of waiting on an email link every time. Passkeys are per-device --
+              you'll need to set one up separately on each phone or computer you use.
+            </p>
+          </div>
+
+          {passkeys.length > 0 && (
+            <ul className="space-y-1 text-sm">
+              {passkeys.map((pk) => (
+                <li key={pk.id} className="flex items-center justify-between rounded border border-stone-200 bg-white px-3 py-2">
+                  <span>{pk.friendly_name || "Passkey"}</span>
+                  <button
+                    type="button"
+                    onClick={() => handleDeletePasskey(pk.id)}
+                    className="text-xs text-red-600 underline"
+                  >
+                    Remove
+                  </button>
+                </li>
+              ))}
+            </ul>
+          )}
+
+          <button
+            type="button"
+            onClick={handleRegisterPasskey}
+            disabled={passkeyStatus === "registering"}
+            className="rounded-md bg-court-green px-4 py-2 text-sm text-white hover:bg-court-green/90 disabled:opacity-50"
+          >
+            {passkeyStatus === "registering" ? "Follow your device's prompt..." : "Set up Passkey on this device"}
+          </button>
+          {passkeyStatus === "error" && (
+            <p className="text-sm text-red-600">{passkeyError || "Couldn't set that up -- try again."}</p>
+          )}
+        </div>
       )}
 
       <style jsx global>{`

@@ -123,7 +123,6 @@ export default function SettingsPage() {
         sandbox_email: settings.sandbox_email || "",
         allow_match_delete: settings.allow_match_delete ?? true,
         email_test_mode_send_to_first_only: settings.email_test_mode_send_to_first_only ?? false,
-        email_test_mode_disable_emails: settings.email_test_mode_disable_emails ?? false,
       })
       .eq("id", true);
     setSaving(false);
@@ -638,18 +637,6 @@ export default function SettingsPage() {
         </label>
         <p className="text-xs text-stone-500">
           When checked, only the first person in a match receives the email. All other players in the match do not get emails.
-        </p>
-        <label className="flex items-center gap-2 text-sm font-medium">
-          <input
-            type="checkbox"
-            disabled={access.role !== "manager"}
-            checked={settings.email_test_mode_disable_emails ?? false}
-            onChange={(e) => setSettings({ ...settings, email_test_mode_disable_emails: e.target.checked })}
-          />
-          Send no emails
-        </label>
-        <p className="text-xs text-stone-500">
-          When checked, the system sends no emails at all. You will be automatically logged in as manager when visiting the website (no email link needed).
         </p>
       </div>
 

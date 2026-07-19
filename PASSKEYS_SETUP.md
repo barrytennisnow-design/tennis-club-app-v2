@@ -38,10 +38,18 @@ reset everyone's passkeys.
 ## 2. Get the new code onto your live site
 
 Files changed/new in this update:
-- `package.json` (changed — newer Supabase library version)
+- `package.json` (already on a Supabase library version new enough)
 - `lib/supabaseClient.ts` (changed — opts in to the passkey feature)
 - `app/login/page.tsx` (changed — adds "Sign in with Passkey" button)
-- `app/profile/page.tsx` (changed — adds "Set up Passkey" button)
+- `app/profile/page.tsx` (changed — adds "Set up Passkey" + manage-passkeys list)
+- `middleware.ts` (changed — removed the old "auto-login as manager while
+  emails are off" testing bypass; passkeys replace that need for real)
+- `app/admin/settings/page.tsx` (changed — removed the "Send no emails"
+  test-mode setting that powered the bypass)
+- `lib/email.ts`, `lib/emailTestMode.ts` (changed — removed the
+  disable-emails skip logic that setting controlled)
+- `supabase/migration_remove_disable_emails.sql` (new — run this once in
+  the Supabase SQL editor to drop the now-unused column)
 
 Same process as always: copy into your local folder, GitHub Desktop →
 commit → push. Vercel will run `npm install` fresh and pick up the newer
