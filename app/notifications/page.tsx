@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabaseClient";
+import { enablePush, disablePush, isPushEnabledOnThisDevice, listenForForegroundPush } from "@/lib/notificationsClient";
 
 const TYPE_ICON: Record<string, string> = {
   match_proposed: "🎾",
@@ -18,6 +19,9 @@ export default function NotificationsPage() {
   const [notifications, setNotifications] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState<"all" | "unread">("all");
+  const [pushEnabled, setPushEnabled] = useState(false);
+  const [pushBusy, setPushBusy] = useState(false);
+  const [pushMessage, setPushMessage] = useState<string | null>(null);
 
   async function load() {
     const { data: userData } = await supabase.auth.getUser();
@@ -45,7 +49,35 @@ export default function NotificationsPage() {
 
   useEffect(() => {
     load();
+    isPushEnabledOnThisDevice().then(setPushEnabled);
+    const unsubscribe = listenForForegroundPush(() => load());
+    return () => {
+      unsubscribe.then((fn) => fn?.());
+    };
   }, []);
+
+  async function togglePush() {
+    setPushBusy(true);
+    setPushMessage(null);
+    if (pushEnabled) {
+      await disablePush();
+      setPushEnabled(false);
+    } else {
+      const result = await enablePush();
+      if (result.ok) {
+        setPushEnabled(true);
+      } else {
+        setPushMessage(
+          result.reason === "permission_denied"
+            ? "Notifications are blocked for this site in your browser settings -- enable them there, then try again."
+            : result.reason === "unsupported"
+            ? "Push notifications aren't supported on this browser/device."
+            : "Couldn't enable push notifications -- please try again."
+        );
+      }
+    }
+    setPushBusy(false);
+  }
 
   async function markRead(id: string) {
     setNotifications((prev) => prev.map((n) => (n.id === id ? { ...n, read_at: n.read_at ?? new Date().toISOString() } : n)));
@@ -108,6 +140,24 @@ export default function NotificationsPage() {
           )}
         </div>
       </div>
+
+      <div className="flex flex-wrap items-center gap-3 rounded-md border border-stone-200 bg-stone-50 p-3 text-sm">
+        <span className="flex-1">
+          {pushEnabled
+            ? "Push notifications are on for this device."
+            : "Get an alert on your phone the moment something happens -- turn on push notifications for this device."}
+        </span>
+        <button
+          onClick={togglePush}
+          disabled={pushBusy}
+          className={`rounded-md px-3 py-1 text-sm disabled:opacity-50 ${
+            pushEnabled ? "border border-stone-300 text-stone-700" : "bg-court-green text-white"
+          }`}
+        >
+          {pushBusy ? "Working..." : pushEnabled ? "Turn off" : "Turn on push notifications"}
+        </button>
+      </div>
+      {pushMessage && <p className="text-sm text-red-700">{pushMessage}</p>}
 
       {visible.length === 0 && (
         <p className="text-stone-500">

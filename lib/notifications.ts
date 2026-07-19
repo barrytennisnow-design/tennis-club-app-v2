@@ -10,6 +10,13 @@
 // posture -- errors are swallowed here rather than bubbled up.
 export type NotificationType = "match_proposed" | "match_confirmed" | "match_cancelled" | "match_reminder";
 
+// This file only depends on firebase-admin indirectly, through
+// lib/push.ts, and that module itself no-ops entirely if
+// FIREBASE_SERVICE_ACCOUNT_JSON isn't set -- so notifyPlayer/
+// notifyPlayers work exactly as they did in phase 1 (inbox row only,
+// no push) until push is actually configured, no code path changes.
+import { sendPushToPlayer } from "./push.ts";
+
 export async function notifyPlayer({
   admin,
   playerId,
@@ -37,6 +44,7 @@ export async function notifyPlayer({
     // Swallow -- see file header. The email already sent (or is about
     // to); a missing inbox row isn't worth failing the request over.
   }
+  await sendPushToPlayer({ admin, playerId, title, body, matchId });
 }
 
 // Same event, many recipients -- the common case at every call site.
@@ -69,4 +77,5 @@ export async function notifyPlayers({
   } catch {
     // Swallow -- see file header.
   }
+  await Promise.all(playerIds.map((playerId) => sendPushToPlayer({ admin, playerId, title, body, matchId })));
 }
