@@ -49,7 +49,26 @@ export async function sendPushToPlayer({
   const firebaseApp = getFirebaseAdminApp();
   if (!firebaseApp) return; // Push not configured yet -- notifications-table write already happened, that's fine on its own.
 
-  const { data: tokenRows } = await admin.from("fcm_tokens").select("token").eq("player_id", playerId);
+  // Push test mode: same idea as email's sandbox_mode -- while on,
+  // reroute every push to one chosen player's devices instead of the
+  // real recipient's, with the title prefixed so it's obvious in
+  // testing who it was really for. See migration_push_test_mode.sql.
+  const { data: clubSettings } = await admin
+    .from("club_settings")
+    .select("push_test_mode, push_test_player_id")
+    .single();
+  const testModeOn = clubSettings?.push_test_mode === true && !!clubSettings?.push_test_player_id;
+
+  let actualPlayerId = playerId;
+  let actualTitle = title;
+  if (testModeOn && clubSettings.push_test_player_id !== playerId) {
+    const { data: realPlayer } = await admin.from("players").select("first_name, last_name").eq("id", playerId).maybeSingle();
+    const realName = realPlayer ? `${realPlayer.first_name} ${realPlayer.last_name}` : "a player";
+    actualPlayerId = clubSettings.push_test_player_id;
+    actualTitle = `[TEST → ${realName}] ${title}`;
+  }
+
+  const { data: tokenRows } = await admin.from("fcm_tokens").select("token").eq("player_id", actualPlayerId);
   const tokens = (tokenRows ?? []).map((r: any) => r.token as string);
   if (tokens.length === 0) return;
 
@@ -61,7 +80,7 @@ export async function sendPushToPlayer({
       try {
         await messaging.send({
           token,
-          notification: { title, body: body ?? "" },
+          notification: { title: actualTitle, body: body ?? "" },
           data: { matchId: matchId ?? "" },
           webpush: { fcmOptions: { link: matchId ? `/matches#match-${matchId}` : "/notifications" } },
         });

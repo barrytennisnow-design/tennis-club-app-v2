@@ -68,6 +68,7 @@ export default function SettingsPage() {
   const [courts, setCourts] = useState<any[]>([]);
   const [timeSlots, setTimeSlots] = useState<any[]>([]);
   const [settings, setSettings] = useState<any>(null);
+  const [players, setPlayers] = useState<any[]>([]);
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
@@ -93,6 +94,12 @@ export default function SettingsPage() {
     setTimeSlots(timeSlotRows ?? []);
     const { data: settingsRow } = await supabase.from("club_settings").select("*").single();
     setSettings(settingsRow);
+    const { data: playerRows } = await supabase
+      .from("players")
+      .select("id, first_name, last_name")
+      .eq("status", "active")
+      .order("first_name");
+    setPlayers(playerRows ?? []);
   }
 
   useEffect(() => {
@@ -123,6 +130,8 @@ export default function SettingsPage() {
         sandbox_email: settings.sandbox_email || "",
         allow_match_delete: settings.allow_match_delete ?? true,
         email_test_mode_send_to_first_only: settings.email_test_mode_send_to_first_only ?? false,
+        push_test_mode: settings.push_test_mode ?? false,
+        push_test_player_id: settings.push_test_player_id || null,
       })
       .eq("id", true);
     setSaving(false);
@@ -637,6 +646,52 @@ export default function SettingsPage() {
         </label>
         <p className="text-xs text-stone-500">
           When checked, only the first person in a match receives the email. All other players in the match do not get emails.
+        </p>
+      </div>
+
+      {/* Push Test Mode */}
+      <div className="space-y-4">
+        <h2 className="text-lg font-semibold">Push Test Mode</h2>
+        <p className="text-xs text-stone-500">
+          While on, every push notification (match proposals, nudges, cancellations, confirmations)
+          gets rerouted to the one player's devices picked below, instead of the real player's --
+          so you can test the phone alerts end to end without spamming everyone else's devices. The
+          notification title is prefixed to show who it was really for. Manager-only.
+        </p>
+        <label className="flex items-center gap-2 text-sm font-medium">
+          <input
+            type="checkbox"
+            disabled={access.role !== "manager"}
+            checked={settings.push_test_mode ?? false}
+            onChange={(e) => setSettings({ ...settings, push_test_mode: e.target.checked })}
+          />
+          Send all push notifications to one player for testing
+        </label>
+        <label className="block text-sm font-medium">
+          Send all test-mode push notifications to
+          <select
+            disabled={access.role !== "manager"}
+            className="mt-1 w-full rounded border border-stone-300 px-2 py-1 disabled:bg-stone-100 disabled:text-stone-400"
+            value={settings.push_test_player_id ?? ""}
+            onChange={(e) => setSettings({ ...settings, push_test_player_id: e.target.value || null })}
+          >
+            <option value="">Select a player...</option>
+            {players.map((p) => (
+              <option key={p.id} value={p.id}>
+                {p.first_name} {p.last_name}
+              </option>
+            ))}
+          </select>
+        </label>
+        {(settings.push_test_mode ?? false) && !settings.push_test_player_id && (
+          <p className="text-xs text-red-700">
+            Pick a player above -- push test mode is on, but with no player selected no test pushes
+            will actually go out.
+          </p>
+        )}
+        <p className="text-xs text-stone-500">
+          That player needs to have turned on push notifications for their own device (on the
+          Notifications page) to actually receive the test alerts.
         </p>
       </div>
 
