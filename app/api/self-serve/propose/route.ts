@@ -59,18 +59,33 @@ export async function POST(request: Request) {
     }, { status: 409 });
   }
 
-  const { data: availRows } = await admin
+  // Re-verify the proposer's own availability -- they were only ever
+  // offered this date because of it (see eligible-dates), but a stale
+  // page load could still try to submit an old date.
+  const { data: myAvail } = await admin
     .from("availability")
-    .select("player_id, players!inner(id, first_name, last_name, email, status)")
+    .select("id")
+    .eq("player_id", me.id)
     .eq("date", date)
     .eq("time_slot", "morning")
-    .in("player_id", allPlayerIds);
-  const availableIds = new Set((availRows ?? []).map((r: any) => r.player_id));
-  const notAvailable = allPlayerIds.filter((id) => !availableIds.has(id));
-  if (notAvailable.length > 0) {
-    return NextResponse.json({ error: "Everyone in the match needs to be marked available that day" }, { status: 400 });
+    .maybeSingle();
+  if (!myAvail) {
+    return NextResponse.json({ error: "You're not marked available that day" }, { status: 403 });
   }
-  const notActive = (availRows ?? []).filter((r: any) => r.players.status !== "active");
+
+  // The other players do NOT need to have marked themselves available
+  // that day -- anyone active and not already assigned is pickable.
+  // Just pull their details directly rather than via the availability
+  // join, so someone without an availability row still gets included
+  // (and still gets their email).
+  const { data: playerRows } = await admin
+    .from("players")
+    .select("id, first_name, last_name, email, status")
+    .in("id", allPlayerIds);
+  if ((playerRows ?? []).length !== allPlayerIds.length) {
+    return NextResponse.json({ error: "One of the players you picked couldn't be found" }, { status: 404 });
+  }
+  const notActive = (playerRows ?? []).filter((p: any) => p.status !== "active");
   if (notActive.length > 0) {
     return NextResponse.json({ error: "One of the players you picked is no longer active" }, { status: 409 });
   }
@@ -116,20 +131,20 @@ export async function POST(request: Request) {
     ...player_ids.map((pid: string) => ({ match_id: newMatch.id, player_id: pid, response_status: "proposed" })),
   ]);
 
-  const namesById = new Map<string, string>((availRows ?? []).map((r: any) => [r.player_id, `${r.players.first_name} ${r.players.last_name}`]));
+  const namesById = new Map<string, string>((playerRows ?? []).map((p: any) => [p.id, `${p.first_name} ${p.last_name}`]));
   const siteUrl = process.env.NEXT_PUBLIC_SITE_URL ?? "";
 
   const testMode = await getEmailTestModeSettings(admin);
   const emailRecipientIds = applyFirstOnlyFilter(player_ids, testMode);
 
   for (const pid of emailRecipientIds) {
-    const row = (availRows ?? []).find((r: any) => r.player_id === pid);
-    if (!row) continue;
+    const player = (playerRows ?? []).find((p: any) => p.id === pid);
+    if (!player) continue;
     const teammates = allPlayerIds.filter((id) => id !== pid).map((id) => namesById.get(id) ?? "Unknown");
     const conflictNote = await checkSameDayConflict(admin, pid, date, newMatch.id);
     const { subject, html } = matchProposedEmail({
       matchNumber,
-      firstName: row.players.first_name,
+      firstName: player.first_name,
       matchDate: date,
       timeSlot: timeDisplay,
       courtName: court.name,
@@ -138,7 +153,7 @@ export async function POST(request: Request) {
       conflictNote,
       proposedByName: `${me.first_name} ${me.last_name}`,
     });
-    await sendEmail({ supabaseAdmin: admin, to: row.players.email, subject, html });
+    await sendEmail({ supabaseAdmin: admin, to: player.email, subject, html });
   }
 
   return NextResponse.json({ ok: true, matchNumber });

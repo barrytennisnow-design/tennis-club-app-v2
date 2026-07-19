@@ -10,6 +10,7 @@ export default function BuildMatchPage() {
   const [optedIn, setOptedIn] = useState(false);
   const [dates, setDates] = useState<string[]>([]);
   const [selectedDate, setSelectedDate] = useState<string | null>(null);
+  const [mode, setMode] = useState<"available" | "any">("available");
   const [openPlayers, setOpenPlayers] = useState<any[]>([]);
   const [selectedPlayerIds, setSelectedPlayerIds] = useState<string[]>([]);
   const [courts, setCourts] = useState<any[]>([]);
@@ -45,12 +46,11 @@ export default function BuildMatchPage() {
     })();
   }, []);
 
-  async function pickDate(date: string) {
-    setSelectedDate(date);
+  async function fetchPlayers(date: string, m: "available" | "any") {
     setSelectedPlayerIds([]);
     setError(null);
     setPlayersLoading(true);
-    const res = await fetch(`/api/self-serve/open-players?date=${date}`);
+    const res = await fetch(`/api/self-serve/open-players?date=${date}&mode=${m}`);
     const json = await res.json();
     setPlayersLoading(false);
     if (!json.ok) {
@@ -59,6 +59,18 @@ export default function BuildMatchPage() {
       return;
     }
     setOpenPlayers(json.players ?? []);
+  }
+
+  async function pickDate(date: string) {
+    setSelectedDate(date);
+    setMode("available");
+    await fetchPlayers(date, "available");
+  }
+
+  function switchMode(m: "available" | "any") {
+    if (m === mode || !selectedDate) return;
+    setMode(m);
+    fetchPlayers(selectedDate, m);
   }
 
   function togglePlayer(id: string) {
@@ -110,10 +122,12 @@ export default function BuildMatchPage() {
       <h1 className="text-xl font-bold">Build Your Own Match</h1>
       <p className="text-sm text-stone-600">
         These are your available, unassigned days that are close enough now to build a match yourself.
-        Pick a day, choose 1 or 3 other open players (2 or 4 people total including you), set a court
-        and time, and propose — you're auto-accepted since you're the one proposing, but everyone
-        else still needs to accept, same as any other match. If two people try to grab the same
-        player or day at once, whoever submits first gets it — the other will be asked to pick again.
+        Pick a day, then choose who to invite — just players who've marked that day available, or any
+        active roster player not already in a proposed or confirmed match that day — then pick 1 or 3
+        of them (2 or 4 people total including you), set a court and time, and propose. You're
+        auto-accepted since you're the one proposing, but everyone else still needs to accept, same as
+        any other match. If two people try to grab the same player or day at once, whoever submits
+        first gets it — the other will be asked to pick again.
       </p>
 
       {success && <p className="rounded bg-green-50 p-2 text-sm text-green-700">{success}</p>}
@@ -147,6 +161,35 @@ export default function BuildMatchPage() {
           </div>
 
           <div>
+            <p className="mb-2 text-sm font-medium">Who do you want to invite?</p>
+            <div className="mb-3 flex flex-wrap gap-2">
+              <button
+                onClick={() => switchMode("available")}
+                className={`rounded-md border px-3 py-1.5 text-sm ${
+                  mode === "available"
+                    ? "border-court-green bg-court-green text-white"
+                    : "border-stone-300 text-stone-700 hover:bg-stone-50"
+                }`}
+              >
+                Available players only
+              </button>
+              <button
+                onClick={() => switchMode("any")}
+                className={`rounded-md border px-3 py-1.5 text-sm ${
+                  mode === "any"
+                    ? "border-court-green bg-court-green text-white"
+                    : "border-stone-300 text-stone-700 hover:bg-stone-50"
+                }`}
+              >
+                Any active roster player
+              </button>
+            </div>
+            <p className="mb-2 text-xs text-stone-500">
+              {mode === "available"
+                ? "Only players who've marked this day available, and aren't already in a proposed or confirmed match that day."
+                : "Every active roster player not already in a proposed or confirmed match that day — including anyone who hasn't marked it available yet."}
+            </p>
+
             <p className="mb-2 text-sm font-medium">
               Pick 1 or 3 other players ({selectedPlayerIds.length} selected, {selectedPlayerIds.length + 1} total):
             </p>
@@ -157,13 +200,16 @@ export default function BuildMatchPage() {
             )}
             {playersLoading && <p className="text-sm text-stone-500">Loading...</p>}
             {!playersLoading && openPlayers.length === 0 && (
-              <p className="text-sm text-stone-500">No one else is open that day right now.</p>
+              <p className="text-sm text-stone-500">
+                {mode === "available" ? "No one else marked available that day right now." : "No one else is open that day right now."}
+              </p>
             )}
             <div className="flex flex-wrap gap-2">
               {openPlayers.map((p) => (
                 <button
                   key={p.id}
                   onClick={() => togglePlayer(p.id)}
+                  title={p.available ? "Marked available that day" : "Hasn't marked that day available yet"}
                   className={`rounded-md border px-3 py-1.5 text-sm ${
                     selectedPlayerIds.includes(p.id)
                       ? "border-court-green bg-court-green text-white"
@@ -171,6 +217,11 @@ export default function BuildMatchPage() {
                   }`}
                 >
                   {p.first_name} {p.last_name}
+                  {mode === "any" && !p.available && (
+                    <span className={selectedPlayerIds.includes(p.id) ? "ml-1 text-white/80" : "ml-1 text-stone-400"}>
+                      (not marked)
+                    </span>
+                  )}
                 </button>
               ))}
             </div>

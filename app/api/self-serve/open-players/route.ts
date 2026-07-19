@@ -5,6 +5,7 @@ import { getSelfServeWindowDays, isWithinSelfServeWindow, getAssignedPlayerIds }
 export async function GET(request: Request) {
   const { searchParams } = new URL(request.url);
   const date = searchParams.get("date");
+  const mode = searchParams.get("mode") === "any" ? "any" : "available";
   if (!date) return NextResponse.json({ error: "date is required" }, { status: 400 });
 
   const supabase = createClient();
@@ -35,21 +36,52 @@ export async function GET(request: Request) {
     return NextResponse.json({ error: "You're already in a match that day" }, { status: 403 });
   }
 
-  // Everyone else active, available that day, and not already tied
-  // up in a match that day. They do NOT need to be opted into
-  // self-serve themselves -- opt-in only controls who can BUILD a
-  // match; anyone active can still be invited into one.
-  const { data: availRows } = await admin
-    .from("availability")
-    .select("player_id, players!inner(id, first_name, last_name, status)")
-    .eq("date", date)
-    .eq("time_slot", "morning")
-    .eq("players.status", "active")
-    .neq("player_id", me.id);
+  // Two distinct modes, picked by the client:
+  //  - "available": only players who've marked themselves available
+  //    that day (the original, narrower self-serve pool).
+  //  - "any": every active roster player, whether or not they've
+  //    marked that day available -- opt-in only controls who can
+  //    BUILD a match; anyone active can still be invited into one.
+  // Either way, nobody already tied up in a proposed/confirmed match
+  // that day is included, and they do NOT need to be opted into
+  // self-serve themselves to be invited.
+  let players: any[];
 
-  const players = (availRows ?? [])
-    .map((r: any) => r.players)
-    .filter((p: any) => !assigned.has(p.id));
+  if (mode === "any") {
+    const { data: activePlayers } = await admin
+      .from("players")
+      .select("id, first_name, last_name, status")
+      .eq("status", "active")
+      .neq("id", me.id);
+
+    const { data: availRows } = await admin
+      .from("availability")
+      .select("player_id")
+      .eq("date", date)
+      .eq("time_slot", "morning");
+    const availableIds = new Set((availRows ?? []).map((r: any) => r.player_id));
+
+    players = (activePlayers ?? [])
+      .filter((p: any) => !assigned.has(p.id))
+      .map((p: any) => ({ ...p, available: availableIds.has(p.id) }))
+      .sort((a: any, b: any) => {
+        if (a.available !== b.available) return a.available ? -1 : 1;
+        return `${a.first_name} ${a.last_name}`.localeCompare(`${b.first_name} ${b.last_name}`);
+      });
+  } else {
+    const { data: availRows } = await admin
+      .from("availability")
+      .select("player_id, players!inner(id, first_name, last_name, status)")
+      .eq("date", date)
+      .eq("time_slot", "morning")
+      .eq("players.status", "active")
+      .neq("player_id", me.id);
+
+    players = (availRows ?? [])
+      .map((r: any) => ({ ...r.players, available: true }))
+      .filter((p: any) => !assigned.has(p.id))
+      .sort((a: any, b: any) => `${a.first_name} ${a.last_name}`.localeCompare(`${b.first_name} ${b.last_name}`));
+  }
 
   return NextResponse.json({ ok: true, players });
 }
