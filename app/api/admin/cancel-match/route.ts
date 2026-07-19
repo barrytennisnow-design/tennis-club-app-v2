@@ -18,7 +18,7 @@ export async function POST(request: Request) {
 
   const { data: match } = await admin
     .from("matches")
-    .select("*, proposer:players!proposed_by(first_name, last_name), match_players(players(first_name, email), created_at)")
+    .select("*, court:courts(name), proposer:players!proposed_by(first_name, last_name), match_players(response_status, players(first_name, last_name, email, phone), created_at)")
     .eq("id", match_id)
     .single();
 
@@ -29,9 +29,10 @@ export async function POST(request: Request) {
 
   const wasDraft = match.status === "draft"; // players were never told about drafts -- no email needed
 
+  const cancelledAt = new Date().toISOString();
   const { error: updateError } = await admin
     .from("matches")
-    .update({ status: "cancelled", cancelled_at: new Date().toISOString() })
+    .update({ status: "cancelled", cancelled_at: cancelledAt })
     .eq("id", match_id);
   if (updateError) return NextResponse.json({ error: updateError.message }, { status: 500 });
 
@@ -39,6 +40,11 @@ export async function POST(request: Request) {
     const defaultTimeDisplay = await getDefaultTimeDisplay(admin);
     const timeDisplay = resolveTimeDisplay(match, defaultTimeDisplay);
     const testMode = await getEmailTestModeSettings(admin);
+    const roster = match.match_players.map((mp: any) => ({
+      name: mp.players ? `${mp.players.first_name} ${mp.players.last_name}` : "Unknown Player",
+      status: mp.response_status,
+      phone: mp.players?.phone ?? null,
+    }));
     const sortedMatchPlayers = [...match.match_players].sort(
       (a: any, b: any) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime()
     );
@@ -50,6 +56,9 @@ export async function POST(request: Request) {
         firstName: mp.players.first_name,
         matchDate: match.match_date,
         timeSlot: timeDisplay,
+        courtName: match.court?.name ?? "Court TBD",
+        roster,
+        cancelledAt,
         reason: "cancelled by the manager",
         proposedByName: match.proposer ? `${match.proposer.first_name} ${match.proposer.last_name}` : "Manager",
       });

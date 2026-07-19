@@ -4,6 +4,7 @@ import { buildMatchIcs } from "../../lib/ics.ts";
 
 const baseArgs = {
   matchId: "abc-123",
+  matchNumber: 7,
   matchDate: "2026-07-16",
   timeDisplay: "8:00am warmup, 8:15am start play",
   courtName: "Langford 1",
@@ -74,5 +75,45 @@ describe("buildMatchIcs", () => {
     const ics2 = buildMatchIcs({ ...baseArgs, matchId: "match-2" });
     assert.match(ics1, /UID:match-match-1@clubtennis/);
     assert.match(ics2, /UID:match-match-2@clubtennis/);
+  });
+
+  test("DESCRIPTION uses the standardized match-details block (Match ID header, CONFIRMED status)", () => {
+    const ics = buildMatchIcs(baseArgs);
+    assert.match(ics, /DESCRIPTION:Match ID: M7 CONFIRMED\\n/);
+    assert.match(ics, /Date: Thursday\\, 7-16-26\\n/);
+    assert.match(ics, /Court: Langford 1\\n/);
+    assert.match(ics, /Players:\\n/);
+  });
+
+  test("DESCRIPTION lists each roster player's status and phone when a roster is provided", () => {
+    const ics = buildMatchIcs({
+      ...baseArgs,
+      roster: [
+        { name: "Alice Anderson", status: "accepted", phone: "7729248587" },
+        { name: "Bob Brown", status: "proposed", phone: null },
+      ],
+    });
+    assert.match(ics, /Alice Anderson.*Status: ACCEPTED \| Phone: \(772\) 924-8587/);
+    assert.match(ics, /Bob Brown.*Status: PROPOSED(?!.*Phone)/);
+  });
+
+  test("DESCRIPTION falls back to ACCEPTED status per playerNames when no roster is given", () => {
+    const ics = buildMatchIcs(baseArgs);
+    assert.match(ics, /Alice Anderson.*Status: ACCEPTED/);
+  });
+
+  test("DESCRIPTION includes Confirmed and match-created-by footer lines when provided", () => {
+    const ics = buildMatchIcs({
+      ...baseArgs,
+      confirmedAt: "2026-07-15T11:04:43-04:00",
+      proposedByName: "Barry Richman",
+    });
+    assert.match(ics, /Confirmed: /);
+    assert.match(ics, /match created by: Barry Richman/);
+  });
+
+  test("LOCATION includes the court address when provided, not just the court name", () => {
+    const ics = buildMatchIcs({ ...baseArgs, courtAddress: "123 Court Rd" });
+    assert.match(ics, /LOCATION:Langford 1\\, 123 Court Rd/);
   });
 });

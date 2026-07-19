@@ -76,6 +76,13 @@ export default function MyMatchesPage() {
     load();
   }, []);
 
+  useEffect(() => {
+    if (loading || myMatches.length === 0) return;
+    if (typeof window === "undefined" || !window.location.hash) return;
+    const el = document.getElementById(window.location.hash.slice(1));
+    el?.scrollIntoView({ behavior: "smooth", block: "start" });
+  }, [loading, myMatches]);
+
   async function respond(matchPlayerId: string, response: "accepted" | "declined") {
     let declineReason: string | null = null;
     if (response === "declined") {

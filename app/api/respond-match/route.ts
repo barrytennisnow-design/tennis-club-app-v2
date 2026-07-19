@@ -49,27 +49,42 @@ export async function POST(request: Request) {
   // The DB trigger (handle_match_player_response) has already run
   // synchronously as part of that update -- re-fetch to see the
   // resulting match status.
-  const { data: updatedMatch } = await admin
+  const { data: updatedMatch, error: updatedMatchError } = await admin
     .from("matches")
-    .select("*, court:courts(name, address, latitude, longitude), proposer:players!proposed_by(first_name, last_name), match_players(response_status, decline_reason, created_at, players(first_name, last_name, email, address, city, state, zip))")
+    .select("*, court:courts(name, address), proposer:players!proposed_by(first_name, last_name), match_players(response_status, decline_reason, created_at, players(first_name, last_name, email, phone, address, city, state, zip))")
     .eq("id", mpRow.match_id)
     .single();
+
+  if (updatedMatchError) {
+    console.error("respond-match: failed to reload match after response", updatedMatchError);
+  }
 
   if (!updatedMatch) return NextResponse.json({ ok: true });
 
   if (updatedMatch.status === "confirmed") {
     const playerNames = updatedMatch.match_players.map((mp: any) => mp.players ? `${mp.players.first_name} ${mp.players.last_name}` : 'Unknown');
+    const roster = updatedMatch.match_players.map((mp: any) => ({
+      name: mp.players ? `${mp.players.first_name} ${mp.players.last_name}` : "Unknown Player",
+      status: mp.response_status,
+      phone: mp.players?.phone ?? null,
+    }));
+    const confirmedAt = updatedMatch.confirmed_at ?? new Date().toISOString();
+    const proposedByName = updatedMatch.proposer
+      ? `${updatedMatch.proposer.first_name} ${updatedMatch.proposer.last_name}`
+      : "Manager";
     const defaultTimeDisplay = await getDefaultTimeDisplay(admin);
     const timeDisplay = resolveTimeDisplay(updatedMatch, defaultTimeDisplay);
     const ics = buildMatchIcs({
       matchId: mpRow.match_id,
+      matchNumber: updatedMatch.match_number,
       matchDate: updatedMatch.match_date,
       timeDisplay,
       courtName: updatedMatch.court?.name ?? "Court TBD",
       playerNames,
+      roster,
       courtAddress: updatedMatch.court?.address,
-      courtLatitude: updatedMatch.court?.latitude,
-      courtLongitude: updatedMatch.court?.longitude,
+      confirmedAt,
+      proposedByName,
     });
     const icsBase64 = Buffer.from(ics).toString("base64");
 
@@ -81,7 +96,6 @@ export async function POST(request: Request) {
 
     for (const mp of emailRecipients) {
       if (!mp.players) continue;
-      const teammates = playerNames.filter((n: string) => n !== `${mp.players.first_name} ${mp.players.last_name}`);
       const playerAddress = [mp.players.address, mp.players.city, mp.players.state, mp.players.zip]
         .filter(Boolean)
         .join(", ") || null;
@@ -93,10 +107,9 @@ export async function POST(request: Request) {
         courtName: updatedMatch.court?.name ?? "Court TBD",
         courtAddress: updatedMatch.court?.address ?? null,
         playerAddress,
-        teammates,
-        proposedByName: updatedMatch.proposer
-          ? `${updatedMatch.proposer.first_name} ${updatedMatch.proposer.last_name}`
-          : "Manager",
+        roster,
+        confirmedAt,
+        proposedByName,
       });
       await sendEmail({
         supabaseAdmin: admin,
@@ -110,6 +123,12 @@ export async function POST(request: Request) {
     const defaultTimeDisplay = await getDefaultTimeDisplay(admin);
     const timeDisplay = resolveTimeDisplay(updatedMatch, defaultTimeDisplay);
     const testMode = await getEmailTestModeSettings(admin);
+    const roster = updatedMatch.match_players.map((mp: any) => ({
+      name: mp.players ? `${mp.players.first_name} ${mp.players.last_name}` : "Unknown Player",
+      status: mp.response_status,
+      phone: mp.players?.phone ?? null,
+    }));
+    const cancelledAt = updatedMatch.cancelled_at ?? new Date().toISOString();
     const sortedMatchPlayers = [...updatedMatch.match_players].sort(
       (a: any, b: any) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime()
     );
@@ -121,6 +140,9 @@ export async function POST(request: Request) {
         firstName: mp.players.first_name,
         matchDate: updatedMatch.match_date,
         timeSlot: timeDisplay,
+        courtName: updatedMatch.court?.name ?? "Court TBD",
+        roster,
+        cancelledAt,
         reason: "a player declined",
         declineReason: decline_reason || null,
         proposedByName: updatedMatch.proposer

@@ -19,7 +19,7 @@ export async function POST(request: Request) {
 
   const { data: match } = await admin
     .from("matches")
-    .select("*, court:courts(name), match_players(player_id, created_at, players(first_name, last_name, email))")
+    .select("*, court:courts(name), match_players(player_id, created_at, response_status, players(first_name, last_name, email, phone, access_token))")
     .eq("id", match_id)
     .single();
 
@@ -39,11 +39,12 @@ export async function POST(request: Request) {
   const { data: settings } = await admin.from("club_settings").select("default_timeout_hours").single();
   const autoCancelHours = settings?.default_timeout_hours ?? 24;
 
+  const proposedAt = new Date().toISOString();
   const { error: updateError } = await admin
     .from("matches")
     .update({
       status: "proposed",
-      proposed_at: new Date().toISOString(),
+      proposed_at: proposedAt,
       auto_cancel_hours: autoCancelHours,
       nudge_count: 0,
       proposed_by: me.id,
@@ -91,12 +92,21 @@ export async function POST(request: Request) {
   );
   const emailRecipients = applyFirstOnlyFilter(sortedMatchPlayers, testMode);
 
+  // Full roster shown in the email, same shape as the My Matches page.
+  // The proposer was just flipped to "accepted" in the DB above, but
+  // the in-memory `match.match_players` was fetched before that
+  // write, so reflect it here rather than re-querying.
+  const roster = match.match_players
+    .filter((mp: any) => mp.players)
+    .map((mp: any) => ({
+      name: `${mp.players.first_name} ${mp.players.last_name}`,
+      status: mp.player_id === me.id ? "accepted" : mp.response_status,
+      phone: mp.players.phone ?? null,
+    }));
+
   for (const mp of emailRecipients) {
     if (!mp.players) continue;
     if (mp.player_id === me.id) continue; // already auto-accepted above, no need to ask them to respond
-    const teammates = match.match_players
-      .filter((other: any) => other.player_id !== mp.player_id && other.players)
-      .map((other: any) => `${other.players.first_name} ${other.players.last_name}`);
 
     // Conflict check: does this player already have another
     // proposed/confirmed match on the same date? We have no access to
@@ -105,14 +115,26 @@ export async function POST(request: Request) {
     // "can't be in two places at once" conflict that matters here.
     const conflictNote = await checkSameDayConflict(admin, mp.player_id, match.match_date, match_id);
 
+    // The player's permanent access-token link logs them in silently
+    // (same mechanism as their bookmarkable "My Club Tennis link"),
+    // then the `next` param lands and scrolls them straight to this
+    // match on /matches -- where the same Accept/Decline buttons and
+    // logic already used on that page render normally, instead of
+    // sending them to a bare /matches that shows "please log in" if
+    // they don't already have a browser session.
+    const acceptUrl = mp.players.access_token
+      ? `${siteUrl}/access/${mp.players.access_token}?next=${encodeURIComponent(`/matches#match-${match_id}`)}`
+      : `${siteUrl}/matches`;
+
     const { subject, html } = matchProposedEmail({
       matchNumber: match.match_number,
       firstName: mp.players.first_name,
       matchDate: match.match_date,
       timeSlot: timeDisplay,
       courtName: match.court?.name ?? "Court TBD",
-      teammates,
-      acceptUrl: `${siteUrl}/matches`,
+      roster,
+      proposedAt,
+      acceptUrl,
       conflictNote,
       proposedByName: `${me.first_name} ${me.last_name}`,
     });

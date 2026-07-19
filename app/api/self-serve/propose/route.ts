@@ -80,7 +80,7 @@ export async function POST(request: Request) {
   // (and still gets their email).
   const { data: playerRows } = await admin
     .from("players")
-    .select("id, first_name, last_name, email, status")
+    .select("id, first_name, last_name, email, phone, access_token, status")
     .in("id", allPlayerIds);
   if ((playerRows ?? []).length !== allPlayerIds.length) {
     return NextResponse.json({ error: "One of the players you picked couldn't be found" }, { status: 404 });
@@ -132,7 +132,15 @@ export async function POST(request: Request) {
   ]);
 
   const namesById = new Map<string, string>((playerRows ?? []).map((p: any) => [p.id, `${p.first_name} ${p.last_name}`]));
+  const rowById = new Map<string, any>((playerRows ?? []).map((p: any) => [p.id, p]));
   const siteUrl = process.env.NEXT_PUBLIC_SITE_URL ?? "";
+
+  // Full roster shown in the email, same shape as the My Matches page.
+  const roster = allPlayerIds.map((id) => ({
+    name: namesById.get(id) ?? "Unknown",
+    status: id === me.id ? "accepted" : "proposed",
+    phone: rowById.get(id)?.phone ?? null,
+  }));
 
   const testMode = await getEmailTestModeSettings(admin);
   const emailRecipientIds = applyFirstOnlyFilter(player_ids, testMode);
@@ -140,16 +148,22 @@ export async function POST(request: Request) {
   for (const pid of emailRecipientIds) {
     const player = (playerRows ?? []).find((p: any) => p.id === pid);
     if (!player) continue;
-    const teammates = allPlayerIds.filter((id) => id !== pid).map((id) => namesById.get(id) ?? "Unknown");
     const conflictNote = await checkSameDayConflict(admin, pid, date, newMatch.id);
+    // Self-authenticating access-token link -- deep-links straight to
+    // this match on /matches with the player already logged in, same
+    // as the manager-propose flow.
+    const acceptUrl = player.access_token
+      ? `${siteUrl}/access/${player.access_token}?next=${encodeURIComponent(`/matches#match-${newMatch.id}`)}`
+      : `${siteUrl}/matches`;
     const { subject, html } = matchProposedEmail({
       matchNumber,
       firstName: player.first_name,
       matchDate: date,
       timeSlot: timeDisplay,
       courtName: court.name,
-      teammates,
-      acceptUrl: `${siteUrl}/matches`,
+      roster,
+      proposedAt: newMatch.proposed_at,
+      acceptUrl,
       conflictNote,
       proposedByName: `${me.first_name} ${me.last_name}`,
     });

@@ -7,7 +7,8 @@
 // 'skipped_no_api_key' so nothing throws in local/dev without a key.
 
 import { Resend } from "resend";
-import { formatShortDate } from "./formatDate";
+import { formatShortDate, formatLongDateWithWeekday } from "./formatDate.ts";
+import { formatMatchDetailsText, type RosterEntry } from "./matchDetails.ts";
 
 let resendClient: Resend | null = null;
 function getResend() {
@@ -112,7 +113,8 @@ export function matchProposedEmail({
   matchDate,
   timeSlot,
   courtName,
-  teammates,
+  roster,
+  proposedAt,
   acceptUrl,
   conflictNote,
   proposedByName,
@@ -122,29 +124,35 @@ export function matchProposedEmail({
   matchDate: string;
   timeSlot: string;
   courtName: string;
-  teammates: string[];
+  roster: RosterEntry[];
+  proposedAt: string;
   acceptUrl: string;
   conflictNote?: string | null;
   proposedByName?: string | null;
 }) {
   const displayDate = formatShortDate(matchDate);
+  const details = formatMatchDetailsText({
+    matchNumber,
+    statusLabel: "PROPOSED",
+    matchDate,
+    timeSlot,
+    courtName,
+    roster,
+    footerLines: [
+      `Proposed: ${new Date(proposedAt).toLocaleString()}`,
+      `match created by: ${proposedByName ?? "Manager"}`,
+    ],
+  });
   return {
     subject: `New match proposed: ${displayDate}`,
     html: `
       <p>Hi ${firstName},</p>
       <p>You've been proposed for a match:</p>
-      <ul>
-        <li><strong>Match ID:</strong> M${matchNumber}</li>
-        <li><strong>Date:</strong> ${displayDate}</li>
-        <li><strong>Time:</strong> ${timeSlot}</li>
-        <li><strong>Court:</strong> ${courtName}</li>
-        <li><strong>Playing with:</strong> ${teammates.join(", ")}</li>
-        ${proposedByName ? `<li><strong>Proposed by:</strong> ${proposedByName}</li>` : ""}
-      </ul>
+      <pre style="font-family:monospace;white-space:pre-wrap;font-size:13px;">${details}</pre>
       ${conflictNote ? `<p style="color:#b45309;"><strong>⚠️ Possible conflict:</strong> ${conflictNote}</p>` : ""}
       <p>Please accept or decline as soon as you can — the match will
       auto-cancel if everyone hasn't accepted in time.</p>
-      <p><a href="${acceptUrl}">Respond to this match</a></p>
+      <p><a href="${acceptUrl}" style="display:inline-block;padding:8px 16px;background:#2d5a3d;color:#ffffff;border-radius:6px;text-decoration:none;">Accept or Decline this Match</a></p>
     `,
   };
 }
@@ -165,15 +173,16 @@ export function matchNudgeEmail({
   proposedByName?: string | null;
 }) {
   const displayDate = formatShortDate(matchDate);
+  const longDate = formatLongDateWithWeekday(matchDate);
   return {
     subject: `Reminder: respond to your ${displayDate} match`,
     html: `
       <p>Hi ${firstName},</p>
       <p>Just a reminder — you still have a proposed match, <strong>Match ID: M${matchNumber}</strong>,
-      on <strong>${displayDate}</strong> (${timeSlot}) waiting on your response.
+      on <strong>${longDate}</strong> (${timeSlot}) waiting on your response.
       It will be automatically cancelled if you don't respond in time.</p>
       ${proposedByName ? `<p>Proposed by: ${proposedByName}</p>` : ""}
-      <p><a href="${acceptUrl}">Respond now</a></p>
+      <p><a href="${acceptUrl}" style="display:inline-block;padding:8px 16px;background:#2d5a3d;color:#ffffff;border-radius:6px;text-decoration:none;">Accept or Decline this Match</a></p>
     `,
   };
 }
@@ -192,7 +201,8 @@ export function matchConfirmedEmail({
   courtName,
   courtAddress,
   playerAddress,
-  teammates,
+  roster,
+  confirmedAt,
   proposedByName,
 }: {
   matchNumber: number | string;
@@ -202,7 +212,8 @@ export function matchConfirmedEmail({
   courtName: string;
   courtAddress?: string | null;
   playerAddress?: string | null;
-  teammates: string[];
+  roster: RosterEntry[];
+  confirmedAt: string;
   proposedByName?: string | null;
 }) {
   const displayDate = formatShortDate(matchDate);
@@ -212,19 +223,24 @@ export function matchConfirmedEmail({
   // if not, the link still works, Google Maps just asks the player
   // for a starting location instead of assuming one.
   const directionsUrl = courtAddress ? buildDirectionsUrl(courtAddress, playerAddress) : null;
+  const details = formatMatchDetailsText({
+    matchNumber,
+    statusLabel: "CONFIRMED",
+    matchDate,
+    timeSlot,
+    courtName: courtAddress ? `${courtName} — ${courtAddress}` : courtName,
+    roster,
+    footerLines: [
+      `Confirmed: ${new Date(confirmedAt).toLocaleString()}`,
+      `match created by: ${proposedByName ?? "Manager"}`,
+    ],
+  });
   return {
     subject: `Confirmed: your match on ${displayDate}`,
     html: `
       <p>Hi ${firstName},</p>
       <p>Everyone accepted — your match is confirmed! 🎾</p>
-      <ul>
-        <li><strong>Match ID:</strong> M${matchNumber}</li>
-        <li><strong>Date:</strong> ${displayDate}</li>
-        <li><strong>Time:</strong> ${timeSlot}</li>
-        <li><strong>Court:</strong> ${courtName}${courtAddress ? ` — ${courtAddress}` : ""}</li>
-        <li><strong>Playing with:</strong> ${teammates.join(", ")}</li>
-        ${proposedByName ? `<li><strong>Proposed by:</strong> ${proposedByName}</li>` : ""}
-      </ul>
+      <pre style="font-family:monospace;white-space:pre-wrap;font-size:13px;">${details}</pre>
       ${
         directionsUrl
           ? `<p><a href="${directionsUrl}" style="display:inline-block;padding:8px 16px;background:#2d5a3d;color:#ffffff;border-radius:6px;text-decoration:none;">Get Directions</a></p>`
@@ -240,6 +256,9 @@ export function matchCancelledEmail({
   firstName,
   matchDate,
   timeSlot,
+  courtName,
+  roster,
+  cancelledAt,
   reason,
   declineReason,
   proposedByName,
@@ -248,19 +267,33 @@ export function matchCancelledEmail({
   firstName: string;
   matchDate: string;
   timeSlot: string;
+  courtName: string;
+  roster: RosterEntry[];
+  cancelledAt: string;
   reason: string;
   declineReason?: string | null;
   proposedByName?: string | null;
 }) {
   const displayDate = formatShortDate(matchDate);
+  const details = formatMatchDetailsText({
+    matchNumber,
+    statusLabel: "CANCELLED",
+    matchDate,
+    timeSlot,
+    courtName,
+    roster,
+    footerLines: [
+      `Cancelled: ${new Date(cancelledAt).toLocaleString()}`,
+      `match created by: ${proposedByName ?? "Manager"}`,
+    ],
+  });
   return {
     subject: `Match cancelled: ${displayDate}`,
     html: `
       <p>Hi ${firstName},</p>
-      <p>Your match, <strong>Match ID: M${matchNumber}</strong>, on <strong>${displayDate}</strong> (${timeSlot}) has been
-      cancelled. Reason: ${reason}</p>
+      <p>Your match has been cancelled. Reason: ${reason}</p>
       ${declineReason ? `<p>Reason given: "${declineReason}"</p>` : ""}
-      ${proposedByName ? `<p>Proposed by: ${proposedByName}</p>` : ""}
+      <pre style="font-family:monospace;white-space:pre-wrap;font-size:13px;">${details}</pre>
       <p>Check your availability and matches page for updates.</p>
     `,
   };

@@ -19,7 +19,7 @@ export async function GET(request: Request, { params }: { params: { matchPlayerI
   const { data: mp } = await admin
     .from("match_players")
     .select(
-      "player_id, matches!inner(id, match_number, match_date, time_slot, time_display, status, court:courts(name), match_players(player_id, players(first_name, last_name)))"
+      "player_id, matches!inner(id, match_number, match_date, time_slot, time_display, status, confirmed_at, court:courts(name, address), proposer:players!proposed_by(first_name, last_name), match_players(player_id, response_status, players(first_name, last_name, phone)))"
     )
     .eq("id", params.matchPlayerId)
     .single();
@@ -32,13 +32,25 @@ export async function GET(request: Request, { params }: { params: { matchPlayerI
   const playerNames = match.match_players
     .filter((row: any) => row.players)
     .map((row: any) => `${row.players.first_name} ${row.players.last_name}`);
+  const roster = match.match_players
+    .filter((row: any) => row.players)
+    .map((row: any) => ({
+      name: `${row.players.first_name} ${row.players.last_name}`,
+      status: row.response_status,
+      phone: row.players.phone ?? null,
+    }));
 
   const ics = buildMatchIcs({
     matchId: match.id,
+    matchNumber: match.match_number,
     matchDate: match.match_date,
     timeDisplay,
     courtName: match.court?.name ?? "Court TBD",
     playerNames,
+    roster,
+    courtAddress: match.court?.address ?? null,
+    confirmedAt: match.confirmed_at ?? undefined,
+    proposedByName: match.proposer ? `${match.proposer.first_name} ${match.proposer.last_name}` : null,
   });
 
   return new NextResponse(ics, {

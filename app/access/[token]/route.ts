@@ -15,8 +15,17 @@ import { NextResponse } from "next/server";
 import { createClient, createAdminClient } from "@/lib/supabaseServer";
 import { ensurePlayerAuthLinked } from "@/lib/linkPlayerAuth";
 
+function safeNextPath(next: string | null): string {
+  // Only allow same-site relative paths (e.g. "/matches#match-123").
+  // Reject anything that could redirect off-site (absolute URLs,
+  // protocol-relative "//evil.com", etc.).
+  if (!next || !next.startsWith("/") || next.startsWith("//")) return "/matches";
+  return next;
+}
+
 export async function GET(request: Request, { params }: { params: { token: string } }) {
-  const { origin } = new URL(request.url);
+  const { origin, searchParams } = new URL(request.url);
+  const nextPath = safeNextPath(searchParams.get("next"));
   const admin = createAdminClient();
 
   const { data: player } = await admin
@@ -54,5 +63,5 @@ export async function GET(request: Request, { params }: { params: { token: strin
 
   await ensurePlayerAuthLinked(admin, player.id, linkData.user.id);
 
-  return NextResponse.redirect(`${origin}/matches`);
+  return NextResponse.redirect(`${origin}${nextPath}`);
 }

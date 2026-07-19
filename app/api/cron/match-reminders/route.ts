@@ -40,7 +40,7 @@ export async function GET(request: Request) {
 
   const { data: proposedMatches } = await supabaseAdmin
     .from("matches")
-    .select("*, court:courts(name), proposer:players!proposed_by(first_name, last_name), match_players(id, response_status, created_at, players(first_name, email))")
+    .select("*, court:courts(name), proposer:players!proposed_by(first_name, last_name), match_players(id, response_status, created_at, players(first_name, last_name, email, phone, access_token))")
     .eq("status", "proposed");
 
   const defaultTimeDisplay = await getDefaultTimeDisplay(supabaseAdmin);
@@ -66,6 +66,12 @@ export async function GET(request: Request) {
         (a: any, b: any) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime()
       );
       const cancelRecipients = applyFirstOnlyFilter(sortedMatchPlayers, testMode);
+      const roster = match.match_players.map((mp: any) => ({
+        name: mp.players ? `${mp.players.first_name} ${mp.players.last_name}` : "Unknown Player",
+        status: mp.response_status,
+        phone: mp.players?.phone ?? null,
+      }));
+      const cancelledAt = now.toISOString();
       for (const mp of cancelRecipients) {
         if (!mp.players) continue;
         const { subject, html } = matchCancelledEmail({
@@ -73,6 +79,9 @@ export async function GET(request: Request) {
           firstName: mp.players.first_name,
           matchDate: match.match_date,
           timeSlot: timeDisplay,
+          courtName: match.court?.name ?? "Court TBD",
+          roster,
+          cancelledAt,
           reason: "not all players responded before the deadline",
           proposedByName: match.proposer ? `${match.proposer.first_name} ${match.proposer.last_name}` : "Manager",
         });
@@ -95,14 +104,18 @@ export async function GET(request: Request) {
           (a: any, b: any) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime()
         );
         const nudgeRecipients = applyFirstOnlyFilter(sortedPending, testMode);
+        const siteUrl = process.env.NEXT_PUBLIC_SITE_URL ?? "";
         for (const mp of nudgeRecipients) {
           if (!mp.players) continue;
+          const acceptUrl = mp.players.access_token
+            ? `${siteUrl}/access/${mp.players.access_token}?next=${encodeURIComponent(`/matches#match-${match.id}`)}`
+            : `${siteUrl}/matches`;
           const { subject, html } = matchNudgeEmail({
             matchNumber: match.match_number,
             firstName: mp.players.first_name,
             matchDate: match.match_date,
             timeSlot: timeDisplay,
-            acceptUrl: `${process.env.NEXT_PUBLIC_SITE_URL ?? ""}/matches`,
+            acceptUrl,
             proposedByName: match.proposer ? `${match.proposer.first_name} ${match.proposer.last_name}` : "Manager",
           });
           await sendEmail({ supabaseAdmin, to: mp.players.email, subject, html });

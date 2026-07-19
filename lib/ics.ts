@@ -5,6 +5,8 @@
 // shown to the player -- default or manager override -- instead of a
 // fixed slot.
 
+import { formatMatchDetailsText, type RosterEntry } from "./matchDetails.ts";
+
 const FALLBACK_START = "080000"; // used only if the display text has no parseable time at all
 const DEFAULT_DURATION_MINUTES = 120; // matches the old fixed 2-hour block
 
@@ -40,22 +42,30 @@ function escapeIcs(text: string) {
 
 export function buildMatchIcs({
   matchId,
+  matchNumber,
   matchDate,
   timeDisplay,
   courtName,
   playerNames,
+  roster,
   courtAddress,
   courtLatitude,
   courtLongitude,
+  confirmedAt,
+  proposedByName,
 }: {
   matchId: string;
+  matchNumber?: number | string;
   matchDate: string;
   timeDisplay: string;
   courtName: string;
   playerNames: string[];
+  roster?: RosterEntry[];
   courtAddress?: string | null;
   courtLatitude?: number | null;
   courtLongitude?: number | null;
+  confirmedAt?: string;
+  proposedByName?: string | null;
 }) {
   const slot = parseStartTime(timeDisplay || "");
   const dtStart = icsDate(matchDate, slot.start);
@@ -63,8 +73,30 @@ export function buildMatchIcs({
   const now = new Date().toISOString().replace(/[-:]/g, "").split(".")[0] + "Z";
 
   const summary = escapeIcs(`Tennis Match — ${courtName}`);
-  const description = escapeIcs(`${timeDisplay || ""}\nPlaying with: ${playerNames.join(", ")}`);
-  const location = escapeIcs(courtName);
+  // DESCRIPTION reuses the exact same block as the confirmation email
+  // (Match ID, date, time, court, full player roster with status +
+  // phone, confirmed timestamp, who created it) instead of a
+  // separate, shorter "time + playing with" summary -- one format,
+  // no drift between what the email says and what the calendar
+  // invite says.
+  const description = escapeIcs(
+    formatMatchDetailsText({
+      matchNumber: matchNumber ?? "",
+      statusLabel: "CONFIRMED",
+      matchDate,
+      timeSlot: timeDisplay || "",
+      courtName,
+      roster: roster ?? playerNames.map((name) => ({ name, status: "ACCEPTED" })),
+      footerLines: [
+        ...(confirmedAt ? [`Confirmed: ${new Date(confirmedAt).toLocaleString()}`] : []),
+        ...(proposedByName ? [`match created by: ${proposedByName}`] : []),
+      ],
+    })
+  );
+  // Include the address in LOCATION (not just the court name) so
+  // calendar apps' own built-in "get directions" from an event can
+  // actually resolve a destination.
+  const location = escapeIcs(courtAddress ? `${courtName}, ${courtAddress}` : courtName);
 
   // Confirmed from the prior system's actual working source code:
   // X-APPLE-TRAVEL-DURATION;VALUE=DURATION:PT30M below sets a fixed
