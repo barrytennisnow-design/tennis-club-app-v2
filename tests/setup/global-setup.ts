@@ -4,9 +4,17 @@
 // avoid needing a real inbox for every test run, we use the Supabase
 // service role key to generate a valid magic link server-side (the
 // same API the app itself already uses for its own "impersonate" and
-// "send access link" features), then have a real browser visit that
-// link directly -- exactly what clicking the email would do, just
-// without waiting on an actual email.
+// "send access link" features), then have a real browser visit our
+// own /auth/callback with that link's token_hash -- exactly what
+// clicking the email would do, just without waiting on an actual
+// email.
+//
+// Note: admin-generated links can't use the PKCE (?code=) flow, since
+// PKCE requires a code verifier that only exists for a browser-
+// initiated login. Supabase instead gives us a token_hash, which we
+// verify directly against /auth/callback?token_hash=...&type=... --
+// see app/auth/callback/route.ts for the matching server-side half of
+// this.
 //
 // Each resulting logged-in session is saved to disk (Playwright's
 // "storageState") so every test file can start already logged in as
@@ -44,20 +52,25 @@ async function loginAndSaveState(
     email,
     options: { redirectTo: `${siteUrl}/auth/callback?next=/matches` },
   });
-  if (error || !data?.properties?.action_link) {
-    throw new Error(`Could not generate a login link for ${email}: ${error?.message ?? "no action_link returned"}`);
+  if (error || !data?.properties?.hashed_token) {
+    throw new Error(`Could not generate a login link for ${email}: ${error?.message ?? "no hashed_token returned"}`);
   }
+
+  // Hit our own callback route directly with the token_hash, rather
+  // than visiting Supabase's action_link -- action_link resolves to
+  // the implicit (#access_token=...) flow for admin-generated links,
+  // which our app has no reason to handle since real users never hit
+  // it. This is the server-verifiable equivalent of clicking the
+  // email link.
+  const confirmUrl =
+    `${siteUrl}/auth/callback?token_hash=${data.properties.hashed_token}` +
+    `&type=magiclink&next=/matches`;
 
   const browser = await chromium.launch();
   const context = await browser.newContext();
   const page = await context.newPage();
 
-  await page.goto(data.properties.action_link);
-  // Supabase's verify endpoint redirects to /auth/callback?code=...,
-  // which exchanges the code and redirects again to /matches. If
-  // your project uses the older "implicit" flow instead of PKCE,
-  // this redirect chain may differ -- see tests/README.md
-  // troubleshooting section if this wait times out.
+  await page.goto(confirmUrl);
   await page.waitForURL(`${siteUrl}/matches`, { timeout: 20_000 });
 
   await context.storageState({ path: outFile });
