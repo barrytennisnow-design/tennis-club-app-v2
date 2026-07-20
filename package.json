@@ -7,7 +7,7 @@
     "build": "next build",
     "start": "next start",
     "lint": "next lint",
-    "test:unit": "node --experimental-strip-types --test tests/unit/*.test.mts"
+    "test:unit": "tsx --test tests/unit/*.test.mts"
   },
   "dependencies": {
     "@supabase/ssr": "^0.5.1",
@@ -26,6 +26,7 @@
     "autoprefixer": "^10.4.19",
     "postcss": "^8.4.39",
     "tailwindcss": "^3.4.6",
+    "tsx": "^4.23.1",
     "typescript": "^5.5.3"
   }
 }
