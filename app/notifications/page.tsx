@@ -10,6 +10,7 @@ const TYPE_ICON: Record<string, string> = {
   match_confirmed: "✅",
   match_cancelled: "❌",
   match_reminder: "⏰",
+  match_invite_withdrawn: "🚫",
 };
 
 export default function NotificationsPage() {

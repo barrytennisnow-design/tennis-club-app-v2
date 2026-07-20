@@ -256,6 +256,32 @@ export function matchConfirmedEmail({
   };
 }
 
+// Sent to an overflow-match invitee (see migration_self_serve_overflow.sql)
+// who never got to respond because the match filled up with other
+// candidates first -- distinct from matchCancelledEmail, since the
+// match itself is still happening, just without them.
+export function matchSpotFilledEmail({
+  matchNumber,
+  firstName,
+  matchDate,
+}: {
+  matchNumber: number | string;
+  firstName: string;
+  matchDate: string;
+}) {
+  const displayDate = formatShortDate(matchDate);
+  return {
+    subject: `Match M${matchNumber} filled up (${displayDate})`,
+    html: `
+      <p>Hi ${firstName},</p>
+      <p>Thanks for your interest in the ${displayDate} match -- it
+      filled up with other players before you responded, so there's
+      nothing left for you to do here. No action needed.</p>
+      <p>Keep an eye out for the next one!</p>
+    `,
+  };
+}
+
 export function matchCancelledEmail({
   matchNumber,
   firstName,

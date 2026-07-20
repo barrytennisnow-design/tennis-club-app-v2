@@ -5,6 +5,7 @@ import { getEmailTestModeSettings, applyFirstOnlyFilter } from "@/lib/emailTestM
 import { buildMatchIcs } from "@/lib/ics";
 import { getDefaultTimeDisplay, resolveTimeDisplay } from "@/lib/timeDisplay";
 import { notifyPlayer } from "@/lib/notifications";
+import { finalizeOverflowMatch, handlePostDecline, sendOverflowConfirmedEmails } from "@/lib/selfServe";
 
 export async function POST(request: Request) {
   const { match_player_id, response, decline_reason } = await request.json();
@@ -46,6 +47,26 @@ export async function POST(request: Request) {
     })
     .eq("id", match_player_id);
   if (updateError) return NextResponse.json({ error: updateError.message }, { status: 500 });
+
+  // Self-serve overflow matches (target_size set -- see
+  // lib/selfServe.ts and migration_self_serve_overflow.sql) follow a
+  // different lifecycle than classic fixed-roster matches: a decline
+  // doesn't cancel anything by itself (there may be more candidates
+  // waiting in the invite pool), and confirming means withdrawing
+  // whoever else is still pending rather than emailing a roster that
+  // includes them. Handle those here and return early; everything
+  // below this block is the classic path only.
+  const { data: matchRow } = await admin.from("matches").select("target_size, status").eq("id", mpRow.match_id).single();
+  if (matchRow?.target_size) {
+    if (matchRow.status === "confirmed") {
+      await finalizeOverflowMatch(admin, mpRow.match_id);
+      await sendOverflowConfirmedEmails(admin, mpRow.match_id);
+    } else if (response === "declined") {
+      await handlePostDecline(admin, mpRow.match_id, matchRow.target_size);
+    }
+    const { data: finalMatch } = await admin.from("matches").select("status").eq("id", mpRow.match_id).single();
+    return NextResponse.json({ ok: true, matchStatus: finalMatch?.status ?? matchRow.status });
+  }
 
   // The DB trigger (handle_match_player_response) has already run
   // synchronously as part of that update -- re-fetch to see the

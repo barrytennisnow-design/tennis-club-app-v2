@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { createClient, createAdminClient } from "@/lib/supabaseServer";
-import { getSelfServeWindowDays, isWithinSelfServeWindow } from "@/lib/selfServe";
+import { getSelfServeWindowDays, isWithinSelfServeWindow, isManagerOrCaptain } from "@/lib/selfServe";
 
 export async function GET() {
   const supabase = createClient();
@@ -10,7 +10,8 @@ export async function GET() {
   const admin = createAdminClient();
   const { data: me } = await admin.from("players").select("*").eq("auth_user_id", userData.user.id).single();
   if (!me) return NextResponse.json({ error: "Player not found" }, { status: 404 });
-  if (!me.self_serve_opt_in) return NextResponse.json({ optedIn: false, dates: [] });
+  const canInviteAnyRoster = isManagerOrCaptain(me.role);
+  if (!me.self_serve_opt_in) return NextResponse.json({ optedIn: false, dates: [], canInviteAnyRoster });
 
   const windowDays = await getSelfServeWindowDays(admin);
   const todayStr = new Date().toISOString().slice(0, 10);
@@ -25,7 +26,7 @@ export async function GET() {
     .map((r: any) => r.date as string)
     .filter((d: string) => isWithinSelfServeWindow(d, windowDays));
 
-  if (candidateDates.length === 0) return NextResponse.json({ optedIn: true, dates: [] });
+  if (candidateDates.length === 0) return NextResponse.json({ optedIn: true, dates: [], canInviteAnyRoster });
 
   // Drop any date where this player is already tied up in a
   // draft/proposed/confirmed match -- nothing to build there.
@@ -38,5 +39,5 @@ export async function GET() {
   const assignedDates = new Set((assignedRows ?? []).map((r: any) => r.matches.match_date));
 
   const dates = candidateDates.filter((d: string) => !assignedDates.has(d)).sort();
-  return NextResponse.json({ optedIn: true, dates });
+  return NextResponse.json({ optedIn: true, dates, canInviteAnyRoster });
 }

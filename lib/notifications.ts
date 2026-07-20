@@ -8,7 +8,7 @@
 // should never block or fail the email send it's paired with, so
 // every call site wraps this in the same "don't let this throw"
 // posture -- errors are swallowed here rather than bubbled up.
-export type NotificationType = "match_proposed" | "match_confirmed" | "match_cancelled" | "match_reminder";
+export type NotificationType = "match_proposed" | "match_confirmed" | "match_cancelled" | "match_reminder" | "match_invite_withdrawn";
 
 // This file only depends on firebase-admin indirectly, through
 // lib/push.ts, and that module itself no-ops entirely if

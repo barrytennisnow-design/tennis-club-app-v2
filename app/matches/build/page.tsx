@@ -4,15 +4,19 @@ import { useEffect, useState } from "react";
 import { createClient } from "@/lib/supabaseClient";
 import { formatShortDateWithWeekday } from "@/lib/formatDate";
 
+const GROUP_SIZES = [2, 4] as const;
+
 export default function BuildMatchPage() {
   const supabase = createClient();
   const [loading, setLoading] = useState(true);
   const [optedIn, setOptedIn] = useState(false);
+  const [canInviteAnyRoster, setCanInviteAnyRoster] = useState(false);
   const [dates, setDates] = useState<string[]>([]);
   const [selectedDate, setSelectedDate] = useState<string | null>(null);
-  const [mode, setMode] = useState<"available" | "any">("available");
+  const [targetSize, setTargetSize] = useState<2 | 4>(4);
   const [openPlayers, setOpenPlayers] = useState<any[]>([]);
-  const [selectedPlayerIds, setSelectedPlayerIds] = useState<string[]>([]);
+  const [availableIds, setAvailableIds] = useState<string[]>([]);
+  const [otherIds, setOtherIds] = useState<string[]>([]);
   const [courts, setCourts] = useState<any[]>([]);
   const [timeSlots, setTimeSlots] = useState<any[]>([]);
   const [courtId, setCourtId] = useState("");
@@ -28,6 +32,7 @@ export default function BuildMatchPage() {
     const res = await fetch("/api/self-serve/eligible-dates");
     const json = await res.json();
     setOptedIn(!!json.optedIn);
+    setCanInviteAnyRoster(!!json.canInviteAnyRoster);
     setDates(json.dates ?? []);
     setLoading(false);
   }
@@ -46,11 +51,12 @@ export default function BuildMatchPage() {
     })();
   }, []);
 
-  async function fetchPlayers(date: string, m: "available" | "any") {
-    setSelectedPlayerIds([]);
+  async function fetchPlayers(date: string) {
+    setAvailableIds([]);
+    setOtherIds([]);
     setError(null);
     setPlayersLoading(true);
-    const res = await fetch(`/api/self-serve/open-players?date=${date}&mode=${m}`);
+    const res = await fetch(`/api/self-serve/open-players?date=${date}`);
     const json = await res.json();
     setPlayersLoading(false);
     if (!json.ok) {
@@ -59,37 +65,41 @@ export default function BuildMatchPage() {
       return;
     }
     setOpenPlayers(json.players ?? []);
+    setCanInviteAnyRoster(!!json.canInviteAnyRoster);
   }
 
   async function pickDate(date: string) {
     setSelectedDate(date);
-    setMode("available");
-    await fetchPlayers(date, "available");
+    await fetchPlayers(date);
   }
 
-  function switchMode(m: "available" | "any") {
-    if (m === mode || !selectedDate) return;
-    setMode(m);
-    fetchPlayers(selectedDate, m);
+  function toggleAvailable(id: string) {
+    setAvailableIds((prev) => (prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]));
+  }
+  function toggleOther(id: string) {
+    setOtherIds((prev) => (prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]));
   }
 
-  function togglePlayer(id: string) {
-    setSelectedPlayerIds((prev) => {
-      if (prev.includes(id)) return prev.filter((x) => x !== id);
-      if (prev.length >= 3) return prev; // max group size is 4 (you + 3 others) -- but only 1 or 3 others is actually valid, see submit()
-      return [...prev, id];
-    });
-  }
+  const invitedCount = availableIds.length + otherIds.length;
+  const enoughInvited = invitedCount >= targetSize - 1;
+  const canSubmit = !!selectedDate && !!courtId && enoughInvited;
 
   async function submit() {
-    if (!selectedDate || (selectedPlayerIds.length !== 1 && selectedPlayerIds.length !== 3) || !courtId) return;
+    if (!canSubmit || !selectedDate) return;
     setSubmitting(true);
     setError(null);
     const time_display = timeChoice === "__default__" ? null : timeChoice;
     const res = await fetch("/api/self-serve/propose", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ date: selectedDate, court_id: courtId, time_display, player_ids: selectedPlayerIds }),
+      body: JSON.stringify({
+        date: selectedDate,
+        court_id: courtId,
+        time_display,
+        target_size: targetSize,
+        available_player_ids: availableIds,
+        other_player_ids: otherIds,
+      }),
     });
     const json = await res.json();
     setSubmitting(false);
@@ -97,9 +107,15 @@ export default function BuildMatchPage() {
       setError(json.error);
       return;
     }
-    setSuccess(`Match M${json.matchNumber} proposed! You're already accepted — the other ${selectedPlayerIds.length} player(s) now need to accept — check My Matches.`);
+    const waveNote = json.waitingOnWave2 > 0
+      ? ` ${json.waitingOnWave2} more player(s) who haven't marked that day available will only be invited if this match is still short 8 hours from now.`
+      : "";
+    setSuccess(
+      `Match M${json.matchNumber} proposed! You're already accepted — ${json.invited} player(s) were just invited, first to accept gets the remaining spot(s) — check My Matches.${waveNote}`
+    );
     setSelectedDate(null);
-    setSelectedPlayerIds([]);
+    setAvailableIds([]);
+    setOtherIds([]);
     setOpenPlayers([]);
     loadDates();
   }
@@ -117,17 +133,22 @@ export default function BuildMatchPage() {
     );
   }
 
+  const availablePlayers = openPlayers.filter((p) => p.available);
+  const otherPlayers = openPlayers.filter((p) => !p.available);
+
   return (
     <div className="space-y-4">
       <h1 className="text-xl font-bold">Build Your Own Match</h1>
       <p className="text-sm text-stone-600">
         These are your available, unassigned days that are close enough now to build a match yourself.
-        Pick a day, then choose who to invite — just players who've marked that day available, or any
-        active roster player not already in a proposed or confirmed match that day — then pick 1 or 3
-        of them (2 or 4 people total including you), set a court and time, and propose. You're
-        auto-accepted since you're the one proposing, but everyone else still needs to accept, same as
-        any other match. If two people try to grab the same player or day at once, whoever submits
-        first gets it — the other will be asked to pick again.
+        Pick a day, say how many players the match needs (2 or 4 total, including you), then invite as
+        many candidates as you like — you can invite more than you need. Whoever accepts first fills the
+        spots; you're auto-accepted since you're proposing.
+        {canInviteAnyRoster
+          ? " As a manager/captain, you can also invite players who haven't marked that day available yet — they're only actually contacted if the match is still short 8 hours after the available players were invited (or once everyone available has responded, if that's sooner)."
+          : " You can only invite players who've marked that day available."}
+        {" "}If two people try to grab the same player or day at once, whoever submits first gets it —
+        the other will be asked to pick again.
       </p>
 
       {success && <p className="rounded bg-green-50 p-2 text-sm text-green-700">{success}</p>}
@@ -161,71 +182,81 @@ export default function BuildMatchPage() {
           </div>
 
           <div>
-            <p className="mb-2 text-sm font-medium">Who do you want to invite?</p>
-            <div className="mb-3 flex flex-wrap gap-2">
-              <button
-                onClick={() => switchMode("available")}
-                className={`rounded-md border px-3 py-1.5 text-sm ${
-                  mode === "available"
-                    ? "border-court-green bg-court-green text-white"
-                    : "border-stone-300 text-stone-700 hover:bg-stone-50"
-                }`}
-              >
-                Available players only
-              </button>
-              <button
-                onClick={() => switchMode("any")}
-                className={`rounded-md border px-3 py-1.5 text-sm ${
-                  mode === "any"
-                    ? "border-court-green bg-court-green text-white"
-                    : "border-stone-300 text-stone-700 hover:bg-stone-50"
-                }`}
-              >
-                Any active roster player
-              </button>
+            <p className="mb-2 text-sm font-medium">How many players does this match need?</p>
+            <div className="flex gap-2">
+              {GROUP_SIZES.map((size) => (
+                <button
+                  key={size}
+                  onClick={() => setTargetSize(size)}
+                  className={`rounded-md border px-3 py-1.5 text-sm ${
+                    targetSize === size
+                      ? "border-court-green bg-court-green text-white"
+                      : "border-stone-300 text-stone-700 hover:bg-stone-50"
+                  }`}
+                >
+                  {size} total
+                </button>
+              ))}
             </div>
-            <p className="mb-2 text-xs text-stone-500">
-              {mode === "available"
-                ? "Only players who've marked this day available, and aren't already in a proposed or confirmed match that day."
-                : "Every active roster player not already in a proposed or confirmed match that day — including anyone who hasn't marked it available yet."}
-            </p>
+          </div>
 
-            <p className="mb-2 text-sm font-medium">
-              Pick 1 or 3 other players ({selectedPlayerIds.length} selected, {selectedPlayerIds.length + 1} total):
-            </p>
-            {selectedPlayerIds.length === 2 && (
-              <p className="mb-2 text-sm text-amber-700">
-                2 others isn't a valid match size here — remove one to propose a 2-person match, or add one more for a 4-person match.
-              </p>
-            )}
+          <div>
+            <p className="mb-1 text-sm font-medium">Available players ({availableIds.length} selected)</p>
+            <p className="mb-2 text-xs text-stone-500">Marked available that day — invited right away. Pick from here first.</p>
             {playersLoading && <p className="text-sm text-stone-500">Loading...</p>}
-            {!playersLoading && openPlayers.length === 0 && (
-              <p className="text-sm text-stone-500">
-                {mode === "available" ? "No one else marked available that day right now." : "No one else is open that day right now."}
-              </p>
+            {!playersLoading && availablePlayers.length === 0 && (
+              <p className="text-sm text-stone-500">No one else marked available that day right now.</p>
             )}
             <div className="flex flex-wrap gap-2">
-              {openPlayers.map((p) => (
+              {availablePlayers.map((p) => (
                 <button
                   key={p.id}
-                  onClick={() => togglePlayer(p.id)}
-                  title={p.available ? "Marked available that day" : "Hasn't marked that day available yet"}
+                  onClick={() => toggleAvailable(p.id)}
                   className={`rounded-md border px-3 py-1.5 text-sm ${
-                    selectedPlayerIds.includes(p.id)
+                    availableIds.includes(p.id)
                       ? "border-court-green bg-court-green text-white"
                       : "border-stone-300 hover:bg-stone-50"
                   }`}
                 >
                   {p.first_name} {p.last_name}
-                  {mode === "any" && !p.available && (
-                    <span className={selectedPlayerIds.includes(p.id) ? "ml-1 text-white/80" : "ml-1 text-stone-400"}>
-                      (not marked)
-                    </span>
-                  )}
                 </button>
               ))}
             </div>
           </div>
+
+          {canInviteAnyRoster && (
+            <div>
+              <p className="mb-1 text-sm font-medium">Everyone else on the active roster ({otherIds.length} selected)</p>
+              <p className="mb-2 text-xs text-stone-500">
+                Haven't marked that day available. Only contacted if the match still needs players once the
+                available group has had 8 hours to respond (or has all responded already).
+              </p>
+              {!playersLoading && otherPlayers.length === 0 && (
+                <p className="text-sm text-stone-500">No one else is open that day right now.</p>
+              )}
+              <div className="flex flex-wrap gap-2">
+                {otherPlayers.map((p) => (
+                  <button
+                    key={p.id}
+                    onClick={() => toggleOther(p.id)}
+                    className={`rounded-md border px-3 py-1.5 text-sm ${
+                      otherIds.includes(p.id)
+                        ? "border-court-green bg-court-green text-white"
+                        : "border-stone-300 hover:bg-stone-50"
+                    }`}
+                  >
+                    {p.first_name} {p.last_name}
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {!enoughInvited && invitedCount > 0 && (
+            <p className="text-sm text-amber-700">
+              You've invited {invitedCount}, but a {targetSize}-player match needs at least {targetSize - 1} candidates invited.
+            </p>
+          )}
 
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
             <label className="text-sm font-medium">
@@ -246,10 +277,10 @@ export default function BuildMatchPage() {
 
           <button
             onClick={submit}
-            disabled={submitting || (selectedPlayerIds.length !== 1 && selectedPlayerIds.length !== 3) || !courtId}
+            disabled={submitting || !canSubmit}
             className="rounded-md bg-court-green px-4 py-2 text-sm text-white disabled:opacity-50"
           >
-            {submitting ? "Proposing..." : `Propose This Match (${selectedPlayerIds.length + 1} players)`}
+            {submitting ? "Proposing..." : `Propose This Match (need ${targetSize}, inviting ${invitedCount})`}
           </button>
         </div>
       )}
