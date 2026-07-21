@@ -5,6 +5,8 @@ import { createClient } from "@/lib/supabaseClient";
 import { formatShortDate, formatShortDateWithWeekday } from "@/lib/formatDate";
 import { useMyAccess } from "@/lib/useMyAccess";
 import { hasPermission } from "@/lib/permissions";
+import { proposerDisplayName } from "@/lib/formatName";
+import { MATCH_STATUS_STYLES, matchStatusLabel } from "@/lib/matchStatus";
 
 export default function AdminMatchesPage() {
   const supabase = createClient();
@@ -90,13 +92,6 @@ export default function AdminMatchesPage() {
     load();
   }, []);
 
-  const statusStyles: Record<string, string> = {
-    draft: "bg-stone-200 text-stone-700",
-    proposed: "bg-yellow-100 text-yellow-800",
-    confirmed: "bg-green-100 text-green-800",
-    cancelled: "bg-red-100 text-red-700",
-  };
-
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
@@ -143,7 +138,7 @@ export default function AdminMatchesPage() {
               return (
                 <tr key={m.id} className={`border-t ${rowColor}`}>
                   <td className="p-2 font-mono">M{m.match_number}</td>
-                  <td className="p-2">{m.proposer ? `${m.proposer.first_name} ${m.proposer.last_name}` : "Manager"}</td>
+                  <td className="p-2">{proposerDisplayName(m.proposer) ?? "Manager"}</td>
                   <td className="p-2 whitespace-nowrap leading-tight">
                     <div>{formatShortDateWithWeekday(m.match_date).split(" ")[0]}</div>
                     <div>{formatShortDate(m.match_date)}</div>
@@ -165,8 +160,8 @@ export default function AdminMatchesPage() {
                     </td>
                   ))}
                   <td className="p-2">
-                    <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${statusStyles[m.status]}`}>
-                      {m.status.toUpperCase()}
+                    <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${MATCH_STATUS_STYLES[m.status] ?? "bg-stone-200 text-stone-700"}`}>
+                      {matchStatusLabel(m.status)}
                     </span>
                   </td>
                   <td className="p-2">{m.proposed_at ? new Date(m.proposed_at).toLocaleString() : "—"}</td>

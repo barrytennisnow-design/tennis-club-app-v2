@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { createClient } from "@/lib/supabaseClient";
 import { formatShortDate } from "@/lib/formatDate";
 import { formatPhone } from "@/lib/formatPhone";
+import { proposerDisplayName } from "@/lib/formatName";
 
 function formatLongDate(dateStr: string) {
   const d = new Date(dateStr + "T00:00:00");
@@ -127,7 +128,7 @@ export default function MyMatchesPage() {
             <p>Date: {formatLongDate(mp.matches.match_date)}</p>
             <p>Time: {mp.matches.time_display || timeDisplay}</p>
             <p>Court: {mp.matches.court?.name ?? "TBD"}</p>
-            <p>Proposed by: {mp.matches.proposer ? `${mp.matches.proposer.first_name} ${mp.matches.proposer.last_name}` : "Manager"}</p>
+            <p>Proposed by: {proposerDisplayName(mp.matches.proposer) ?? "Manager"}</p>
 
             <p className="mt-3 font-medium">Players:</p>
             <ul className="ml-4 list-disc space-y-0.5">

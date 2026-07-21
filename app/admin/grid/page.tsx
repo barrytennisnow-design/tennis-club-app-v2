@@ -6,6 +6,8 @@ import { formatPhone } from "@/lib/formatPhone";
 import { formatShortDateWithWeekday } from "@/lib/formatDate";
 import { useMyAccess } from "@/lib/useMyAccess";
 import { hasPermission } from "@/lib/permissions";
+import { proposerDisplayName } from "@/lib/formatName";
+import { MATCH_STATUS_STYLES, matchStatusLabel } from "@/lib/matchStatus";
 
 function isoDaysFromNow(n: number) {
   const d = new Date();
@@ -561,9 +563,14 @@ export default function MatchMatrixPage() {
                           <div key={m.id} className={`rounded p-1 ${color}`}>
                             <div className="text-xs font-semibold">
                               M{m.match_number}
-                              {m.proposer && (
-                                <span className="font-normal text-stone-500"> — {m.proposer.first_name} {m.proposer.last_name}</span>
+                              {proposerDisplayName(m.proposer) && (
+                                <span className="font-normal text-stone-500"> — {proposerDisplayName(m.proposer)}</span>
                               )}
+                            </div>
+                            <div className="mb-1">
+                              <span className={`rounded-full px-1.5 py-0.5 text-[10px] font-medium ${MATCH_STATUS_STYLES[m.status] ?? "bg-stone-200 text-stone-700"}`}>
+                                {matchStatusLabel(m.status)}
+                              </span>
                             </div>
                             {m.status === "draft" ? (
                               <select
@@ -636,9 +643,14 @@ export default function MatchMatrixPage() {
         <div className="w-72 space-y-1 rounded-md border bg-stone-50 p-3 text-sm">
           <p className="font-bold">
             M{selectedMatch.match_number}
-            {selectedMatch.proposer && (
-              <span className="font-normal text-stone-500"> — {selectedMatch.proposer.first_name} {selectedMatch.proposer.last_name}</span>
+            {proposerDisplayName(selectedMatch.proposer) && (
+              <span className="font-normal text-stone-500"> — {proposerDisplayName(selectedMatch.proposer)}</span>
             )}
+          </p>
+          <p>
+            <span className={`rounded-full px-1.5 py-0.5 text-[10px] font-medium ${MATCH_STATUS_STYLES[selectedMatch.status] ?? "bg-stone-200 text-stone-700"}`}>
+              {matchStatusLabel(selectedMatch.status)}
+            </span>
           </p>
 
           {selectedMatch.status === "draft" ? (

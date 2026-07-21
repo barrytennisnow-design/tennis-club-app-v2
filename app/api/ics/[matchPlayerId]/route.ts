@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabaseServer";
 import { buildMatchIcs } from "@/lib/ics";
 import { getDefaultTimeDisplay, resolveTimeDisplay } from "@/lib/timeDisplay";
+import { proposerDisplayName } from "@/lib/formatName";
 
 // Deliberately NOT session/cookie-based. iOS's Mail/Calendar apps
 // often fetch a .ics URL (or anything served as text/calendar)
@@ -50,7 +51,7 @@ export async function GET(request: Request, { params }: { params: { matchPlayerI
     roster,
     courtAddress: match.court?.address ?? null,
     confirmedAt: match.confirmed_at ?? undefined,
-    proposedByName: match.proposer ? `${match.proposer.first_name} ${match.proposer.last_name}` : null,
+    proposedByName: proposerDisplayName(match.proposer),
   });
 
   return new NextResponse(ics, {

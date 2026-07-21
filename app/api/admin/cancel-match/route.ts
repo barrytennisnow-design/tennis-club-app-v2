@@ -5,6 +5,7 @@ import { getEmailTestModeSettings, applyFirstOnlyFilter } from "@/lib/emailTestM
 import { getDefaultTimeDisplay, resolveTimeDisplay } from "@/lib/timeDisplay";
 import { hasPermission } from "@/lib/permissions";
 import { notifyPlayer } from "@/lib/notifications";
+import { proposerDisplayName } from "@/lib/formatName";
 
 export async function POST(request: Request) {
   const { match_id } = await request.json();
@@ -61,7 +62,7 @@ export async function POST(request: Request) {
         roster,
         cancelledAt,
         reason: "cancelled by the manager",
-        proposedByName: match.proposer ? `${match.proposer.first_name} ${match.proposer.last_name}` : "Manager",
+        proposedByName: proposerDisplayName(match.proposer) ?? "Manager",
       });
       await sendEmail({ supabaseAdmin: admin, to: mp.players.email, subject, html });
       await notifyPlayer({

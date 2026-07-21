@@ -6,6 +6,7 @@ import { getDefaultTimeDisplay, resolveTimeDisplay } from "@/lib/timeDisplay";
 import { checkSameDayConflict } from "@/lib/conflict";
 import { hasPermission } from "@/lib/permissions";
 import { notifyPlayer } from "@/lib/notifications";
+import { proposerDisplayName } from "@/lib/formatName";
 
 export async function POST(request: Request) {
   const { match_id } = await request.json();
@@ -137,7 +138,7 @@ export async function POST(request: Request) {
       proposedAt,
       acceptUrl,
       conflictNote,
-      proposedByName: `${me.first_name} ${me.last_name}`,
+      proposedByName: proposerDisplayName(me) ?? "Manager",
     });
 
     await sendEmail({

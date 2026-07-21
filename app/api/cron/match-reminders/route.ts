@@ -18,6 +18,7 @@ import { sendEmail, matchNudgeEmail, matchCancelledEmail } from "@/lib/email";
 import { getEmailTestModeSettings, applyFirstOnlyFilter } from "@/lib/emailTestMode";
 import { getDefaultTimeDisplay, resolveTimeDisplay } from "@/lib/timeDisplay";
 import { notifyPlayer } from "@/lib/notifications";
+import { proposerDisplayName } from "@/lib/formatName";
 
 export async function GET(request: Request) {
   const authHeader = request.headers.get("authorization");
@@ -84,7 +85,7 @@ export async function GET(request: Request) {
           roster,
           cancelledAt,
           reason: "not all players responded before the deadline",
-          proposedByName: match.proposer ? `${match.proposer.first_name} ${match.proposer.last_name}` : "Manager",
+          proposedByName: proposerDisplayName(match.proposer) ?? "Manager",
         });
         await sendEmail({ supabaseAdmin, to: mp.players.email, subject, html });
         await notifyPlayer({
@@ -125,7 +126,7 @@ export async function GET(request: Request) {
             matchDate: match.match_date,
             timeSlot: timeDisplay,
             acceptUrl,
-            proposedByName: match.proposer ? `${match.proposer.first_name} ${match.proposer.last_name}` : "Manager",
+            proposedByName: proposerDisplayName(match.proposer) ?? "Manager",
           });
           await sendEmail({ supabaseAdmin, to: mp.players.email, subject, html });
           await notifyPlayer({

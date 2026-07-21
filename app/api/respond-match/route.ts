@@ -6,6 +6,7 @@ import { buildMatchIcs } from "@/lib/ics";
 import { getDefaultTimeDisplay, resolveTimeDisplay } from "@/lib/timeDisplay";
 import { notifyPlayer } from "@/lib/notifications";
 import { finalizeOverflowMatch, handlePostDecline, sendOverflowConfirmedEmails } from "@/lib/selfServe";
+import { proposerDisplayName } from "@/lib/formatName";
 
 export async function POST(request: Request) {
   const { match_player_id, response, decline_reason } = await request.json();
@@ -91,9 +92,7 @@ export async function POST(request: Request) {
       phone: mp.players?.phone ?? null,
     }));
     const confirmedAt = updatedMatch.confirmed_at ?? new Date().toISOString();
-    const proposedByName = updatedMatch.proposer
-      ? `${updatedMatch.proposer.first_name} ${updatedMatch.proposer.last_name}`
-      : "Manager";
+    const proposedByName = proposerDisplayName(updatedMatch.proposer) ?? "Manager";
     const defaultTimeDisplay = await getDefaultTimeDisplay(admin);
     const timeDisplay = resolveTimeDisplay(updatedMatch, defaultTimeDisplay);
     const ics = buildMatchIcs({
@@ -184,9 +183,7 @@ export async function POST(request: Request) {
         cancelledAt,
         reason: "a player declined",
         declineReason: decline_reason || null,
-        proposedByName: updatedMatch.proposer
-          ? `${updatedMatch.proposer.first_name} ${updatedMatch.proposer.last_name}`
-          : "Manager",
+        proposedByName: proposerDisplayName(updatedMatch.proposer) ?? "Manager",
       });
       await sendEmail({ supabaseAdmin: admin, to: mp.players.email, subject, html });
       await notifyPlayer({

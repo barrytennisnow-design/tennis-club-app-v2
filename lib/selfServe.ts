@@ -18,6 +18,7 @@ import { sendEmail, matchProposedEmail, matchConfirmedEmail, matchCancelledEmail
 import { getEmailTestModeSettings, applyFirstOnlyFilter } from "@/lib/emailTestMode";
 import { getDefaultTimeDisplay, resolveTimeDisplay } from "@/lib/timeDisplay";
 import { checkSameDayConflict } from "@/lib/conflict";
+import { proposerDisplayName } from "@/lib/formatName";
 import { notifyPlayer } from "@/lib/notifications";
 import { buildMatchIcs } from "@/lib/ics";
 
@@ -112,7 +113,7 @@ export async function sendWaveInvites(admin: any, matchId: string, playerIds: st
   const testMode = await getEmailTestModeSettings(admin);
   const emailRecipientIds = applyFirstOnlyFilter(playerIds, testMode);
   const siteUrl = process.env.NEXT_PUBLIC_SITE_URL ?? "";
-  const proposedByName = match.proposer ? `${match.proposer.first_name} ${match.proposer.last_name}` : "a club member";
+  const proposedByName = proposerDisplayName(match.proposer) ?? "a club member";
 
   for (const pid of emailRecipientIds) {
     const player = (playerRows ?? []).find((p: any) => p.id === pid);
@@ -245,7 +246,7 @@ export async function cancelExhaustedMatch(admin: any, matchId: string, reason: 
     (a: any, b: any) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime()
   );
   const emailRecipients = applyFirstOnlyFilter(sortedMatchPlayers, testMode);
-  const proposedByName = updatedMatch.proposer ? `${updatedMatch.proposer.first_name} ${updatedMatch.proposer.last_name}` : "Manager";
+  const proposedByName = proposerDisplayName(updatedMatch.proposer) ?? "Manager";
 
   for (const mp of emailRecipients) {
     if (!mp.players) continue;
@@ -291,7 +292,7 @@ export async function sendOverflowConfirmedEmails(admin: any, matchId: string): 
     phone: mp.players?.phone ?? null,
   }));
   const confirmedAt = updatedMatch.confirmed_at ?? new Date().toISOString();
-  const proposedByName = updatedMatch.proposer ? `${updatedMatch.proposer.first_name} ${updatedMatch.proposer.last_name}` : "Manager";
+  const proposedByName = proposerDisplayName(updatedMatch.proposer) ?? "Manager";
   const defaultTimeDisplay = await getDefaultTimeDisplay(admin);
   const timeDisplay = resolveTimeDisplay(updatedMatch, defaultTimeDisplay);
   const ics = buildMatchIcs({

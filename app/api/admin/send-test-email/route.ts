@@ -3,6 +3,7 @@ import { createClient, createAdminClient } from "@/lib/supabaseServer";
 import { sendEmail, matchProposedEmail, matchConfirmedEmail, matchCancelledEmail } from "@/lib/email";
 import { buildMatchIcs } from "@/lib/ics";
 import { getDefaultTimeDisplay, resolveTimeDisplay } from "@/lib/timeDisplay";
+import { proposerDisplayName } from "@/lib/formatName";
 
 // Manager-only "preview" tool for the Match Matrix: builds the exact
 // same propose / confirm / cancel email (and .ics, for confirm) that
@@ -43,9 +44,7 @@ export async function POST(request: Request) {
 
   const defaultTimeDisplay = await getDefaultTimeDisplay(admin);
   const timeDisplay = resolveTimeDisplay(match, defaultTimeDisplay);
-  const proposedByName = match.proposer
-    ? `${match.proposer.first_name} ${match.proposer.last_name}`
-    : `${me.first_name} ${me.last_name}`;
+  const proposedByName = proposerDisplayName(match.proposer) ?? proposerDisplayName(me) ?? "Manager";
   const roster = match.match_players
     .filter((mp: any) => mp.players)
     .map((mp: any) => ({
