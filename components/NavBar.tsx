@@ -18,19 +18,22 @@ export default function NavBar() {
   const [unreadCount, setUnreadCount] = useState(0);
 
   useEffect(() => {
-    (async () => {
-      const { data: userData } = await supabase.auth.getUser();
-      if (!userData.user) return;
-      setLoggedIn(true);
+    let unreadInterval: ReturnType<typeof setInterval> | null = null;
+
+    async function loadProfile(userId: string) {
       const { data: me } = await supabase
         .from("players")
         .select("id, role, self_serve_opt_in")
-        .eq("auth_user_id", userData.user.id)
+        .eq("auth_user_id", userId)
         .maybeSingle();
-      if (me?.role === "manager") setIsManager(true);
-      if (me?.role === "captain") setIsCaptain(true);
+      setIsManager(me?.role === "manager");
+      setIsCaptain(me?.role === "captain");
       setSelfServeOptIn(!!me?.self_serve_opt_in);
 
+      if (unreadInterval) {
+        clearInterval(unreadInterval);
+        unreadInterval = null;
+      }
       if (me?.id) {
         const refreshUnread = async () => {
           const { count } = await supabase
@@ -44,10 +47,51 @@ export default function NavBar() {
         // Lightweight polling rather than a realtime subscription --
         // good enough for a badge count, and avoids holding a socket
         // open on every page for something this low-stakes.
-        const interval = setInterval(refreshUnread, 60000);
-        return () => clearInterval(interval);
+        unreadInterval = setInterval(refreshUnread, 60000);
       }
-    })();
+    }
+
+    function reset() {
+      setLoggedIn(false);
+      setIsManager(false);
+      setIsCaptain(false);
+      setSelfServeOptIn(false);
+      setUnreadCount(0);
+      if (unreadInterval) {
+        clearInterval(unreadInterval);
+        unreadInterval = null;
+      }
+    }
+
+    // Covers a hard page load (or refresh) where a session already
+    // exists in cookies -- e.g. arriving via the magic-link callback's
+    // server-side redirect.
+    supabase.auth.getUser().then(({ data }) => {
+      if (data.user) {
+        setLoggedIn(true);
+        loadProfile(data.user.id);
+      }
+    });
+
+    // Covers a sign-in/sign-out that happens without a full page
+    // reload -- e.g. passkey sign-in, which completes entirely in the
+    // browser and navigates with router.push() rather than a hard
+    // redirect. NavBar only mounts once per layout (not once per
+    // route), so without this listener it never finds out a login
+    // just happened and keeps showing its earlier "logged out" menu.
+    const { data: sub } = supabase.auth.onAuthStateChange((_event, session) => {
+      if (session?.user) {
+        setLoggedIn(true);
+        loadProfile(session.user.id);
+      } else {
+        reset();
+      }
+    });
+
+    return () => {
+      sub.subscription.unsubscribe();
+      if (unreadInterval) clearInterval(unreadInterval);
+    };
   }, []);
 
   async function handleLogoff() {
