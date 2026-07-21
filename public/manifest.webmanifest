@@ -1,0 +1,21 @@
+{
+  "name": "Club Tennis",
+  "short_name": "Club Tennis",
+  "description": "Player signup, availability, and match-making",
+  "start_url": "/matches",
+  "display": "standalone",
+  "background_color": "#1e5a32",
+  "theme_color": "#1e5a32",
+  "icons": [
+    {
+      "src": "/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png"
+    },
+    {
+      "src": "/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png"
+    }
+  ]
+}

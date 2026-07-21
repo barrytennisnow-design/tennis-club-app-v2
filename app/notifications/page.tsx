@@ -23,6 +23,7 @@ export default function NotificationsPage() {
   const [pushEnabled, setPushEnabled] = useState(false);
   const [pushBusy, setPushBusy] = useState(false);
   const [pushMessage, setPushMessage] = useState<string | null>(null);
+  const [iosInstallState, setIosInstallState] = useState<"none" | "not-installed" | "installed">("none");
 
   async function load() {
     const { data: userData } = await supabase.auth.getUser();
@@ -52,6 +53,18 @@ export default function NotificationsPage() {
     load();
     isPushEnabledOnThisDevice().then(setPushEnabled);
     const unsubscribe = listenForForegroundPush(() => load());
+
+    // iOS only allows push notifications for a site that's been added
+    // to the Home Screen and opened from that icon -- never from a
+    // regular Safari or Chrome tab (Apple restriction, not a bug).
+    // Detect that case so we can show install steps instead of a
+    // dead-end "unsupported" message.
+    const ua = window.navigator.userAgent;
+    const isIOS = /iPad|iPhone|iPod/.test(ua) || (ua.includes("Macintosh") && navigator.maxTouchPoints > 1);
+    const isStandalone =
+      window.matchMedia("(display-mode: standalone)").matches || (window.navigator as any).standalone === true;
+    if (isIOS) setIosInstallState(isStandalone ? "installed" : "not-installed");
+
     return () => {
       unsubscribe.then((fn) => fn?.());
     };
@@ -142,22 +155,51 @@ export default function NotificationsPage() {
         </div>
       </div>
 
-      <div className="flex flex-wrap items-center gap-3 rounded-md border border-stone-200 bg-stone-50 p-3 text-sm">
-        <span className="flex-1">
-          {pushEnabled
-            ? "Push notifications are on for this device."
-            : "Get an alert on your phone the moment something happens -- turn on push notifications for this device."}
-        </span>
-        <button
-          onClick={togglePush}
-          disabled={pushBusy}
-          className={`rounded-md px-3 py-1 text-sm disabled:opacity-50 ${
-            pushEnabled ? "border border-stone-300 text-stone-700" : "bg-court-green text-white"
-          }`}
-        >
-          {pushBusy ? "Working..." : pushEnabled ? "Turn off" : "Turn on push notifications"}
-        </button>
-      </div>
+      {iosInstallState === "not-installed" ? (
+        <div className="space-y-2 rounded-md border border-stone-200 bg-stone-50 p-3 text-sm">
+          <p className="font-semibold">Get notifications on your iPhone/iPad</p>
+          <p className="text-stone-600">
+            iOS only allows push notifications for apps added to your Home
+            Screen -- this is an Apple rule, not something specific to this
+            site. To turn them on:
+          </p>
+          <ol className="list-decimal space-y-1 pl-5 text-stone-600">
+            <li>
+              Open this page in <strong>Safari</strong> if you aren't already
+              (Chrome and other browsers on iPhone can't add a Home Screen
+              icon the same way).
+            </li>
+            <li>
+              Tap the <strong>Share</strong> icon (square with an arrow
+              pointing up) in Safari's toolbar.
+            </li>
+            <li>
+              Scroll down and tap <strong>Add to Home Screen</strong>, then{" "}
+              <strong>Add</strong>.
+            </li>
+            <li>Close Safari, then open the app from its new icon on your Home Screen.</li>
+            <li>Come back to this Notifications page and tap "Turn on push notifications" again.</li>
+          </ol>
+          <p className="text-xs text-stone-400">Requires iOS 16.4 or later.</p>
+        </div>
+      ) : (
+        <div className="flex flex-wrap items-center gap-3 rounded-md border border-stone-200 bg-stone-50 p-3 text-sm">
+          <span className="flex-1">
+            {pushEnabled
+              ? "Push notifications are on for this device."
+              : "Get an alert on your phone the moment something happens -- turn on push notifications for this device."}
+          </span>
+          <button
+            onClick={togglePush}
+            disabled={pushBusy}
+            className={`rounded-md px-3 py-1 text-sm disabled:opacity-50 ${
+              pushEnabled ? "border border-stone-300 text-stone-700" : "bg-court-green text-white"
+            }`}
+          >
+            {pushBusy ? "Working..." : pushEnabled ? "Turn off" : "Turn on push notifications"}
+          </button>
+        </div>
+      )}
       {pushMessage && <p className="text-sm text-red-700">{pushMessage}</p>}
 
       {visible.length === 0 && (
