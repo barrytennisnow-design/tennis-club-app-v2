@@ -6,6 +6,19 @@ import { ZoomProvider, ZoomedContent } from "@/lib/zoomContext";
 export const metadata = {
   title: "Club Tennis",
   description: "Player signup, availability, and match-making",
+  manifest: "/manifest.webmanifest",
+  // iOS ignores the manifest for a lot of this and needs its own
+  // Apple-specific tags before it will treat the site as an
+  // installable app -- which is required before push notifications
+  // can work at all on iPhone (see lib/notificationsClient.ts).
+  appleWebApp: {
+    capable: true,
+    statusBarStyle: "default",
+    title: "Club Tennis",
+  },
+  icons: {
+    apple: "/apple-touch-icon.png",
+  },
 };
 
 // Next.js's App Router does NOT add a viewport meta tag automatically
@@ -15,6 +28,7 @@ export const metadata = {
 export const viewport = {
   width: "device-width",
   initialScale: 1,
+  themeColor: "#1e5a32",
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
