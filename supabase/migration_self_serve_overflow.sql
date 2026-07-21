@@ -1,7 +1,7 @@
 -- ============================================================
 -- Migration: self-serve overflow invites
 --
--- Reworks self-serve match building from "invite exactly 1 or 3 
+-- Reworks self-serve  match building from "invite exactly 1 or 3 
 -- other players" to "say how many you need (2 or 4 total), invite
 -- as many candidates as you want, first-come-first-served fills the
 -- spots." Adds a waved invite pool so a self-serve proposer (or a
