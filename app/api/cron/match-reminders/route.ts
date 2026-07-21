@@ -43,7 +43,16 @@ export async function GET(request: Request) {
   const { data: proposedMatches } = await supabaseAdmin
     .from("matches")
     .select("*, court:courts(name), proposer:players!proposed_by(first_name, last_name), match_players(id, player_id, response_status, created_at, players(first_name, last_name, email, phone, access_token))")
-    .eq("status", "proposed");
+    .eq("status", "proposed")
+    // Self-serve overflow matches (target_size set) have their own
+    // deadline formula (hours OR 1 hour before start, whichever is
+    // sooner) and their own cancellation path that correctly
+    // withdraws only the still-pending invite pool rather than
+    // emailing everyone as if the match had a fixed roster -- see
+    // app/api/cron/self-serve-promote/route.ts, which owns their
+    // entire lifecycle. Handling them here too would double-process
+    // the same match from two different crons.
+    .is("target_size", null);
 
   const defaultTimeDisplay = await getDefaultTimeDisplay(supabaseAdmin);
   const testMode = await getEmailTestModeSettings(supabaseAdmin);

@@ -126,6 +126,7 @@ export default function SettingsPage() {
         default_timeout_hours: settings.default_timeout_hours || 24,
         nudge_frequency_hours: settings.nudge_frequency_hours || 12,
         self_serve_window_days: settings.self_serve_window_days ?? 3,
+        self_serve_response_hours: settings.self_serve_response_hours ?? 1,
         sandbox_mode: settings.sandbox_mode ?? true,
         sandbox_email: settings.sandbox_email || "",
         allow_match_delete: settings.allow_match_delete ?? true,
@@ -586,6 +587,17 @@ export default function SettingsPage() {
             value={settings.self_serve_window_days ?? 3}
             onChange={(e) => setSettings({ ...settings, self_serve_window_days: parseInt(e.target.value) || 0 })}
             min="0"
+          />
+        </label>
+        <label className="block text-sm font-medium">
+          Hours to wait for available players before inviting everyone else
+          <input
+            type="number"
+            disabled={!hasPermission(access, "settings_change_self_serve_window")}
+            className="mt-1 w-full rounded border border-stone-300 px-2 py-1 disabled:bg-stone-100 disabled:text-stone-400"
+            value={settings.self_serve_response_hours ?? 1}
+            onChange={(e) => setSettings({ ...settings, self_serve_response_hours: parseInt(e.target.value) || 1 })}
+            min="1"
           />
         </label>
       </div>

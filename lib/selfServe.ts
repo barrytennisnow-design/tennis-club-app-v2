@@ -25,14 +25,68 @@ import { buildMatchIcs } from "@/lib/ics";
 export const SELF_SERVE_GROUP_SIZES = [2, 4] as const;
 export type SelfServeGroupSize = (typeof SELF_SERVE_GROUP_SIZES)[number];
 
-// How long wave 1 (available players) gets before wave 2 (everyone
-// else) is brought in, if the match is still short.
-export const WAVE2_DELAY_HOURS = 8;
+// Fallback only -- the real value is manager-configurable via
+// club_settings.self_serve_response_hours (see getSelfServeResponseHours
+// below and migration_self_serve_response_hours.sql). Used only if
+// that row is somehow missing.
+export const DEFAULT_SELF_SERVE_RESPONSE_HOURS = 1;
 
-// Only managers and captains may invite players who haven't marked
-// themselves available that day -- everyone else building their own
-// match can only pick from players who've actually said they're
-// free.
+export async function getSelfServeResponseHours(supabaseAdmin: any): Promise<number> {
+  const { data } = await supabaseAdmin.from("club_settings").select("self_serve_response_hours").single();
+  return data?.self_serve_response_hours ?? DEFAULT_SELF_SERVE_RESPONSE_HOURS;
+}
+
+// Time slots (and a match's own time_display override) are free text
+// like "8:00am warmup, 8:15am start play" -- there's no structured
+// clock-time column anywhere. Rather than add one, pull the first
+// clock time mentioned out of that text, so "1 hour before match
+// start" has something to work with. Returns null if nothing
+// time-shaped is found, so callers can fall back to the plain
+// hours-based deadline.
+export function parseFirstClockTime(text: string | null | undefined): { hour: number; minute: number } | null {
+  if (!text) return null;
+  const match = text.match(/(\d{1,2})(?::(\d{2}))?\s*([ap])\.?m\.?/i);
+  if (!match) return null;
+  let hour = parseInt(match[1], 10);
+  const minute = match[2] ? parseInt(match[2], 10) : 0;
+  const isPM = match[3].toLowerCase() === "p";
+  if (hour === 12) hour = 0;
+  if (isPM) hour += 12;
+  if (hour > 23 || minute > 59) return null;
+  return { hour, minute };
+}
+
+// A self-serve (target_size) match auto-cancels at whichever comes
+// first: the classic auto_cancel_hours window after it was proposed,
+// or 1 hour before the match's own start time (when a clock time can
+// be parsed out of its time_display / the default time slot's
+// description) -- no point still inviting candidates for a match
+// that's about to start.
+export function computeSelfServeDeadline(params: {
+  proposedAt: string | Date;
+  autoCancelHours: number;
+  matchDate: string;
+  timeText: string | null | undefined;
+}): Date {
+  const proposedAt = new Date(params.proposedAt);
+  const hoursDeadline = new Date(proposedAt.getTime() + params.autoCancelHours * 3600000);
+
+  const parsed = parseFirstClockTime(params.timeText);
+  if (!parsed) return hoursDeadline;
+
+  const startDateTime = new Date(`${params.matchDate}T00:00:00`);
+  startDateTime.setHours(parsed.hour, parsed.minute, 0, 0);
+  const oneHourBeforeStart = new Date(startDateTime.getTime() - 3600000);
+
+  return oneHourBeforeStart < hoursDeadline ? oneHourBeforeStart : hoursDeadline;
+}
+
+// Managers and captains get two extra powers regular self-serve
+// players don't: they can build a match for any date (not just the
+// self-serve window) and can leave themselves out of the match
+// entirely (organizing without playing). Inviting players who
+// haven't marked themselves available is now open to everyone
+// opted in to self-serve, not staff-only -- see propose/route.ts.
 export function isManagerOrCaptain(role: string | null | undefined): boolean {
   return role === "manager" || role === "captain";
 }

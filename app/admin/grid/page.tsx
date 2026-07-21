@@ -112,7 +112,7 @@ export default function MatchMatrixPage() {
 
     const { data: matchRows, error: matchError } = await supabase
       .from("matches")
-      .select("id, match_number, match_date, time_slot, time_display, status, court:courts(id, name), proposed_by, proposer:players!proposed_by(first_name, last_name), match_players(id, player_id, response_status, players(id, first_name, last_name))")
+      .select("id, match_number, match_date, time_slot, time_display, status, target_size, court:courts(id, name), proposed_by, proposer:players!proposed_by(first_name, last_name), match_players(id, player_id, response_status, players(id, first_name, last_name))")
       .gte("match_date", days[0])
       .lte("match_date", days[days.length - 1])
       .neq("status", "cancelled");
@@ -525,8 +525,17 @@ export default function MatchMatrixPage() {
                   // Get player's response status for this match
                   const playerMatch = m ? m.match_players?.find((mp: any) => mp.player_id === p.id) : null;
                   const responseStatus = playerMatch?.response_status;
-                  // For draft matches, always show DRAFT status
-                  const displayStatus = m?.status === "draft" ? "DRAFT" : (responseStatus ? responseStatus.toUpperCase() : m?.status?.toUpperCase() || "");
+                  // For draft matches, always show DRAFT status. A
+                  // self-serve (target_size) match never actually
+                  // cancels on a decline -- the system just keeps
+                  // trying to backfill that slot from the invite
+                  // pool -- so "declined" reads as an open slot
+                  // still being worked, not a dead end.
+                  const displayStatus = m?.status === "draft"
+                    ? "DRAFT"
+                    : m?.target_size && responseStatus === "declined"
+                    ? "LOOKING"
+                    : (responseStatus ? responseStatus.toUpperCase() : m?.status?.toUpperCase() || "");
                   return (
                     <td key={d} className="p-0 text-center">
                       <button
@@ -572,6 +581,15 @@ export default function MatchMatrixPage() {
                                 {matchStatusLabel(m.status)}
                               </span>
                             </div>
+                            {m.target_size && m.status === "proposed" && (() => {
+                              const accepted = (m.match_players ?? []).filter((mp: any) => mp.response_status === "accepted").length;
+                              const stillNeeded = m.target_size - accepted;
+                              return stillNeeded > 0 ? (
+                                <div className="mb-1 text-[10px] font-medium text-amber-700">
+                                  Self-serve — looking for {stillNeeded} more
+                                </div>
+                              ) : null;
+                            })()}
                             {m.status === "draft" ? (
                               <select
                                 disabled={!hasPermission(access, "matrix_change_court")}
@@ -706,7 +724,11 @@ export default function MatchMatrixPage() {
           {selectedMatch.match_players.map((mp: any) => (
             <p key={mp.id}>
               {mp.players ? `${mp.players.first_name} ${mp.players.last_name}` : 'Unknown Player'} :{" "}
-              {selectedMatch.status === "draft" ? "DRAFT" : mp.response_status.toUpperCase()}
+              {selectedMatch.status === "draft"
+                ? "DRAFT"
+                : selectedMatch.target_size && mp.response_status === "declined"
+                ? "LOOKING"
+                : mp.response_status.toUpperCase()}
             </p>
           ))}
 
