@@ -1,25 +1,15 @@
 "use client";
 
-import { Suspense, useEffect, useState } from "react";
-import { useRouter, useSearchParams } from "next/navigation";
+import { useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabaseClient";
 
 export default function LoginPage() {
-  return (
-    <Suspense fallback={null}>
-      <LoginPageContent />
-    </Suspense>
-  );
-}
-
-function LoginPageContent() {
   const supabase = createClient();
   const router = useRouter();
-  const searchParams = useSearchParams();
   const [email, setEmail] = useState("");
   const [status, setStatus] = useState<"idle" | "sending" | "sent" | "error">("idle");
   const [errorMsg, setErrorMsg] = useState("");
-  const linkError = searchParams.get("linkError");
   const [passkeySupported, setPasskeySupported] = useState(false);
   const [passkeyStatus, setPasskeyStatus] = useState<"idle" | "signing-in" | "error">("idle");
   const [passkeyError, setPasskeyError] = useState("");
@@ -70,11 +60,6 @@ function LoginPageContent() {
 
   return (
     <div className="mx-auto max-w-sm space-y-4">
-      {linkError && (
-        <div className="rounded-md bg-amber-50 p-4 text-sm text-amber-800">
-          {linkError} Try requesting a new link below.
-        </div>
-      )}
       {passkeySupported && (
         <div className="space-y-2 rounded-md border border-court-green/30 bg-court-green/5 p-4">
           <button
