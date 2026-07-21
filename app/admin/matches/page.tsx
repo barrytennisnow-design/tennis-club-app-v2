@@ -11,6 +11,15 @@ export default function AdminMatchesPage() {
   const access = useMyAccess();
   const [matches, setMatches] = useState<any[]>([]);
   const [allowDelete, setAllowDelete] = useState(true);
+  // Local text buffers for the two editable number columns, keyed by
+  // match id. The inputs are NOT bound directly to m.auto_cancel_hours /
+  // m.nudge_count while being edited -- that used to fire a DB write +
+  // full-table reload on every keystroke, and the resulting async
+  // round trips could resolve out of order and stomp the value the
+  // user just typed (it would appear to silently revert). Instead we
+  // buffer here and only commit on blur / Enter.
+  const [timeoutEdits, setTimeoutEdits] = useState<Record<string, string>>({});
+  const [nudgeEdits, setNudgeEdits] = useState<Record<string, string>>({});
 
   async function load() {
     const { data } = await supabase
@@ -24,13 +33,33 @@ export default function AdminMatchesPage() {
   }
 
   async function updateTimeout(matchId: string, hours: number) {
-    await supabase.from("matches").update({ auto_cancel_hours: hours }).eq("id", matchId);
-    load();
+    // Optimistic local update -- avoids a full reload() racing with
+    // the write, and keeps the UI snappy even if the request is slow.
+    setMatches((prev) => prev.map((m) => (m.id === matchId ? { ...m, auto_cancel_hours: hours } : m)));
+    setTimeoutEdits((prev) => {
+      const next = { ...prev };
+      delete next[matchId];
+      return next;
+    });
+    const { error } = await supabase.from("matches").update({ auto_cancel_hours: hours }).eq("id", matchId);
+    if (error) {
+      alert(`Couldn't save auto-cancel hours: ${error.message}`);
+      load(); // re-sync with the server since our optimistic update was wrong
+    }
   }
 
   async function updateNudgeCount(matchId: string, count: number) {
-    await supabase.from("matches").update({ nudge_count: count }).eq("id", matchId);
-    load();
+    setMatches((prev) => prev.map((m) => (m.id === matchId ? { ...m, nudge_count: count } : m)));
+    setNudgeEdits((prev) => {
+      const next = { ...prev };
+      delete next[matchId];
+      return next;
+    });
+    const { error } = await supabase.from("matches").update({ nudge_count: count }).eq("id", matchId);
+    if (error) {
+      alert(`Couldn't save nudge count: ${error.message}`);
+      load();
+    }
   }
 
   async function cancelMatch(matchId: string, matchNumber: number) {
@@ -148,8 +177,15 @@ export default function AdminMatchesPage() {
                       <input
                         type="number"
                         className="w-16 rounded border border-stone-300 px-1 py-0.5 text-xs"
-                        value={m.auto_cancel_hours ?? 24}
-                        onChange={(e) => updateTimeout(m.id, parseInt(e.target.value) || 24)}
+                        value={timeoutEdits[m.id] ?? String(m.auto_cancel_hours ?? 24)}
+                        onChange={(e) => setTimeoutEdits((prev) => ({ ...prev, [m.id]: e.target.value }))}
+                        onBlur={(e) => {
+                          const parsed = parseInt(e.target.value, 10);
+                          updateTimeout(m.id, Number.isFinite(parsed) && parsed > 0 ? parsed : m.auto_cancel_hours ?? 24);
+                        }}
+                        onKeyDown={(e) => {
+                          if (e.key === "Enter") (e.target as HTMLInputElement).blur();
+                        }}
                         min="1"
                       />
                     ) : (
@@ -161,8 +197,15 @@ export default function AdminMatchesPage() {
                       <input
                         type="number"
                         className="w-16 rounded border border-stone-300 px-1 py-0.5 text-xs"
-                        value={m.nudge_count ?? 0}
-                        onChange={(e) => updateNudgeCount(m.id, parseInt(e.target.value) || 0)}
+                        value={nudgeEdits[m.id] ?? String(m.nudge_count ?? 0)}
+                        onChange={(e) => setNudgeEdits((prev) => ({ ...prev, [m.id]: e.target.value }))}
+                        onBlur={(e) => {
+                          const parsed = parseInt(e.target.value, 10);
+                          updateNudgeCount(m.id, Number.isFinite(parsed) && parsed >= 0 ? parsed : m.nudge_count ?? 0);
+                        }}
+                        onKeyDown={(e) => {
+                          if (e.key === "Enter") (e.target as HTMLInputElement).blur();
+                        }}
                         min="0"
                       />
                     ) : (
