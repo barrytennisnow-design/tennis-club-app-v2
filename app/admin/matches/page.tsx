@@ -22,6 +22,7 @@ export default function AdminMatchesPage() {
   // buffer here and only commit on blur / Enter.
   const [timeoutEdits, setTimeoutEdits] = useState<Record<string, string>>({});
   const [nudgeEdits, setNudgeEdits] = useState<Record<string, string>>({});
+  const [defaultTimeDisplay, setDefaultTimeDisplay] = useState("");
 
   async function load() {
     const { data } = await supabase
@@ -32,6 +33,18 @@ export default function AdminMatchesPage() {
     setMatches(data ?? []);
     const { data: settingsRow } = await supabase.from("club_settings").select("allow_match_delete").single();
     setAllowDelete(settingsRow?.allow_match_delete ?? true);
+    // time_slot is just an internal label ("morning") -- the actual
+    // human-readable time only exists on time_display (a manager's
+    // per-match override) or, absent that, whichever time slot is
+    // flagged default. Falling back to time_slot itself is what was
+    // showing "morning" instead of the real description.
+    const { data: defaultSlot } = await supabase
+      .from("time_slots")
+      .select("description")
+      .eq("is_default", true)
+      .eq("is_active", true)
+      .maybeSingle();
+    setDefaultTimeDisplay(defaultSlot?.description ?? "");
   }
 
   async function updateTimeout(matchId: string, hours: number) {
@@ -143,7 +156,7 @@ export default function AdminMatchesPage() {
                     <div>{formatShortDateWithWeekday(m.match_date).split(" ")[0]}</div>
                     <div>{formatShortDate(m.match_date)}</div>
                   </td>
-                  <td className="p-2">{m.time_display || m.time_slot}</td>
+                  <td className="p-2">{m.time_display || defaultTimeDisplay || m.time_slot}</td>
                   <td className="p-2">{m.court?.name ?? "TBD"}</td>
                   {players.map((mp: any, i: number) => (
                     <td key={i} className="p-2">
