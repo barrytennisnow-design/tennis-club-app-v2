@@ -4,7 +4,7 @@ Two layers, for two different jobs:
 
 1. **Unit tests** (`tests/unit/`) — test pure logic functions directly. No
    database, no browser, no deployed site needed. Fast (under a second),
-   safe to run anytime, and already verified passing (28/28) against the
+   safe to run anytime, and already verified passing (45/45) against the
    current code.
 2. **End-to-end tests** (`tests/specs/`) — drive a real browser against a
    real (test) deployment and a real (test) Supabase database, clicking
@@ -42,6 +42,11 @@ your package manager) or ask to add `tsx` as a devDependency instead.
   "no leading zeros" format (`7-16-26`, not `07-16-26`) that's tripped
   up test code before.
 - `lib/selfServe.ts` — the self-serve eligibility window boundary logic.
+- `lib/matching.ts` — `getNextMatchNumber`, specifically the exact
+  regression from this session: a DRAFT match sitting on the Match
+  Matrix must reserve its number just as much as a proposed/
+  confirmed/cancelled one, or a later self-serve proposal (or another
+  Generate run) can be handed that same number.
 - `lib/ics.ts` — calendar invite generation, specifically guarding the
   two real regressions from this session: the two-alarm requirement
   (30 min / 15 min) and the `X-APPLE-TRAVEL-DURATION` property
@@ -148,7 +153,10 @@ npx playwright show-report
   the Match Matrix. Guards against the RLS gap where captains could
   only ever see their own row despite having full permissions granted.
 - **`match-numbering.spec.ts`** — confirms a cancelled match's number
-  is never reused by a later Generate Match Matrix run.
+  is never reused by a later Generate Match Matrix run, AND (added
+  this session) that an un-proposed draft's number is never handed to
+  a self-serve match built while that draft is still sitting on the
+  Match Matrix.
 - **`matches-delete-toggle.spec.ts`** — confirms the Settings page's
   "allow match delete" toggle actually blocks deletion server-side
   (not just hides the button), and that flipping it back on restores
