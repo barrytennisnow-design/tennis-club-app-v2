@@ -517,24 +517,25 @@ export default function MatchMatrixPage() {
                   const isAvailUnassigned = !m && availIndex.has(`${p.id}_${d}`);
                   const isOverloaded = overloaded.has(`${p.id}_${d}`);
                   const isSelected = selected?.playerId === p.id && selected?.date === d;
-                  const color = m
-                    ? matchColor[m.id]
-                    : isAvailUnassigned
-                    ? UNASSIGNED_COLOR
-                    : "";
                   // Get player's response status for this match
                   const playerMatch = m ? m.match_players?.find((mp: any) => mp.player_id === p.id) : null;
                   const responseStatus = playerMatch?.response_status;
-                  // For draft matches, always show DRAFT status. A
-                  // self-serve (target_size) match never actually
+                  // A self-serve (target_size) match never actually
                   // cancels on a decline -- the system just keeps
                   // trying to backfill that slot from the invite
-                  // pool -- so "declined" reads as an open slot
-                  // still being worked, not a dead end.
+                  // pool. So a decline here isn't really "part of the
+                  // match" anymore -- it reads the same as any other
+                  // open slot: no color, "Unas." behind the name,
+                  // same as a player who was simply never assigned.
+                  const isSelfServeDecline = !!m && !!m.target_size && responseStatus === "declined";
+                  const color = m
+                    ? (isSelfServeDecline ? "" : matchColor[m.id])
+                    : isAvailUnassigned
+                    ? UNASSIGNED_COLOR
+                    : "";
+                  // For draft matches, always show DRAFT status.
                   const displayStatus = m?.status === "draft"
                     ? "DRAFT"
-                    : m?.target_size && responseStatus === "declined"
-                    ? "LOOKING"
                     : (responseStatus ? responseStatus.toUpperCase() : m?.status?.toUpperCase() || "");
                   return (
                     <td key={d} className="p-0 text-center">
@@ -543,7 +544,13 @@ export default function MatchMatrixPage() {
                         onClick={() => handleCellClick(p.id, d, m, isAvailUnassigned)}
                         className={`block w-full whitespace-nowrap rounded px-1 py-0 leading-tight ${color} ${isOverloaded ? "ring-2 ring-orange-400" : ""} ${isSelected ? "outline outline-2 outline-purple-500" : ""} ${swapSlots.some((s) => s.playerId === p.id && s.date === d) ? "outline outline-2 outline-purple-600" : ""}`}
                       >
-                        {m ? `${p.first_name} M${m.match_number} ${displayStatus}` : isAvailUnassigned ? `${p.first_name} Unas.` : ""}
+                        {isSelfServeDecline
+                          ? `${p.first_name} Unas.`
+                          : m
+                          ? `${p.first_name} M${m.match_number} ${displayStatus}`
+                          : isAvailUnassigned
+                          ? `${p.first_name} Unas.`
+                          : ""}
                       </button>
                     </td>
                   );

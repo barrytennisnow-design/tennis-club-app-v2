@@ -14,12 +14,21 @@ database and website:
   (was: the "Match Matrix" / "Proposed Matches" spreadsheet, built by hand)
 - **Email notifications**: players get emailed when proposed for a match,
   nudged if they haven't responded halfway to the deadline, and notified if
-  a match auto-cancels — via a scheduled job that runs every 30 minutes
+  a match auto-cancels — via a scheduled job that runs every 15 minutes
+  (needs the included GitHub Actions workflow turned on, or Vercel Pro —
+  see "Deploy to Vercel" below)
   (was: the manual "hour for auto cancel" / "Nudge Count" columns you had
   to watch and act on by hand)
 
 Everything below runs on free tiers: **Supabase** (Postgres + Auth) and
-**Vercel** (hosting). Total cost: $0/month for a club this size.
+**Vercel** (hosting). Total cost: $0/month for a club this size — with one
+caveat: if this repo is **private**, the 15-minute GitHub Actions schedule
+used to trigger the cron jobs on time (see "Deploy to Vercel" below) can
+run past GitHub's free Actions minutes for private repos in a busy month.
+Making the repo **public** keeps Actions minutes unlimited and free; if it
+needs to stay private, either loosen the schedule in
+`.github/workflows/scheduled-crons.yml` or use a free third-party
+scheduler like cron-job.org instead (also covered below).
 
 ## 1. Create your Supabase project
 
@@ -95,11 +104,55 @@ Visit http://localhost:3000
    need to redeploy once after your first deploy to pick up the right URL).
 5. Deploy.
 
-Vercel reads `vercel.json` automatically and schedules
-`/api/cron/match-reminders` to run every 30 minutes — no extra setup
-needed once deployed. (Cron jobs only run on deployed Vercel projects, not
-`npm run dev` locally — see the manual test below if you want to test it
-before deploying.)
+Vercel reads `vercel.json` automatically and schedules both
+`/api/cron/match-reminders` and `/api/cron/self-serve-promote` to run every
+15 minutes — no extra setup needed for that part once deployed. (Cron jobs
+only run on deployed Vercel projects, not `npm run dev` locally — see the
+manual test below if you want to test either one before deploying.)
+
+**Important — Vercel's free Hobby plan and cron frequency:** Hobby only
+runs cron jobs once a day, no matter what schedule is in `vercel.json` — it
+silently collapses `*/15 * * * *` down to a single daily run, with no
+error or warning that it did so. Both jobs here are time-sensitive and
+manager-configurable (self-serve's response window on the Settings page,
+defaulting to 1 hour; a match's nudge/auto-cancel deadline on the Manage
+Matches page), so "once a day" isn't good enough for either one on Hobby.
+
+To fix that without paying for [Vercel
+Pro](https://vercel.com/docs/cron-jobs/usage-and-pricing), this repo
+includes a GitHub Actions workflow —
+`.github/workflows/scheduled-crons.yml` — that acts as an external
+scheduler independent of Vercel's plan limits. It runs every 15 minutes
+and calls the same two cron routes Vercel's own config points at; the
+routes are idempotent (each only acts on matches actually past their own
+threshold), so it's safe to have both Vercel's cron and this workflow
+pointed at the same endpoints. To turn it on:
+
+1. In this repo on GitHub, go to **Settings → Secrets and variables →
+   Actions → New repository secret** and add two secrets:
+   - `CRON_SECRET` — the same value as the `CRON_SECRET` env var in
+     Vercel's project settings.
+   - `SITE_URL` — your deployed site's base URL (e.g.
+     `https://your-club.vercel.app`, no trailing slash).
+2. That's it — GitHub will start running it on its own schedule. You can
+   also trigger a run manually from the **Actions** tab → "Scheduled match
+   crons" → **Run workflow**, to confirm it's wired up correctly before
+   waiting on the schedule.
+
+A couple of things worth knowing about GitHub Actions' scheduler, both
+covered in comments at the top of the workflow file: it isn't
+minute-precise under load (usually only a few minutes off, rarely more),
+and GitHub auto-disables scheduled workflows after 60 days of no other
+repo activity — if reminders/promotions seem to silently stop, check the
+Actions tab for a "workflow disabled" notice.
+
+If you'd rather use a dedicated scheduler instead of GitHub Actions (e.g.
+if the repo is private and Actions minutes are a concern), any service
+that can hit a URL with a custom header on a schedule works —
+[cron-job.org](https://cron-job.org) is a free option. Point it at both
+`/api/cron/match-reminders` and `/api/cron/self-serve-promote` with header
+`Authorization: Bearer <your CRON_SECRET>`, and disable/delete the GitHub
+Actions workflow so the two schedulers aren't both running.
 
 ## 6. Make yourself the manager
 
@@ -144,6 +197,16 @@ before deploying.)
    nudge or cancellation fire, temporarily lower `auto_cancel_hours` on a
    test match to something small (e.g. `0.02` ≈ 1 minute) via the Supabase
    table editor, wait a minute, then hit the curl command again.
+   You can test the self-serve wave-2 promotion cron the same way:
+   ```bash
+   curl -H "Authorization: Bearer YOUR_CRON_SECRET" \
+     https://your-club.vercel.app/api/cron/self-serve-promote
+   ```
+   which returns `{"ok":true,"checked":1,"promoted":0,"cancelled":0}`. To
+   see it actually promote wave 2, build a self-serve match with both an
+   "available" and an "everyone else" pool, then temporarily lower
+   `club_settings.self_serve_response_hours` to something small before
+   hitting the curl command again.
 8. Check the **`email_log`** table in Supabase any time to see every email
    the system attempted to send and its status.
 
@@ -173,11 +236,14 @@ cross-load a day, prioritize players who haven't played recently, etc.).
 
 The nudge/auto-cancel-by-timer behavior from the old sheet (columns like
 "hour for auto cancel," "Nudge Count") is now fully wired up:
-`app/api/cron/match-reminders/route.ts`, scheduled via `vercel.json` to run
-every 30 minutes. Each match's `auto_cancel_hours` field controls its
-deadline (default 24h from when it was proposed); at the halfway point,
-anyone who hasn't responded gets one nudge email, and past the full
-deadline the match auto-cancels and all 4 players are notified.
+`app/api/cron/match-reminders/route.ts`, scheduled via `vercel.json` (and,
+for it to actually fire that often on a free Vercel plan, the GitHub
+Actions workflow described under "Deploy to Vercel" above) to run every 15
+minutes. Each match's `auto_cancel_hours` field controls its deadline
+(default 24h from when it was proposed, editable per match by a manager on
+the Manage Matches page); at the halfway point, anyone who hasn't
+responded gets one nudge email, and past the full deadline the match
+auto-cancels and all 4 players are notified.
 
 ## What's intentionally left as a next step
 

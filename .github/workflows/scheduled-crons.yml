@@ -1,0 +1,82 @@
+name: Scheduled match crons
+
+# Vercel's free Hobby plan silently collapses ANY schedule in
+# vercel.json down to a single run per day, no matter what interval
+# is configured there -- there is no error or warning, it just runs
+# once daily. That's fine for nothing-is-urgent jobs, but two of this
+# app's jobs are explicitly time-sensitive and manager-configurable:
+#
+#   - /api/cron/self-serve-promote: promotes wave-2 (not-marked-
+#     available) invitees on a Build-a-Match once wave 1's response
+#     window has passed. That window defaults to 1 hour
+#     (club_settings.self_serve_response_hours, set on the Settings
+#     page) -- a once-a-day check makes that "1 hour" effectively
+#     "up to 24 hours."
+#   - /api/cron/match-reminders: sends the halfway-point nudge and
+#     auto-cancels a match once its deadline passes. The deadline is
+#     club_settings-driven by default but can be overridden per match
+#     by a manager on the Manage Matches page (auto_cancel_hours) --
+#     a once-a-day check means a manager who shortens a match's
+#     deadline to, say, 3 hours won't see it actually enforced on
+#     time.
+#
+# This workflow is what makes those actually run on schedule,
+# independent of whatever Vercel plan the site is deployed on. It
+# doesn't duplicate any logic -- it just calls the same two routes
+# Vercel's own cron config also points at (see /vercel.json). Both
+# routes are safe to call more often than strictly necessary: each
+# only acts on matches that are actually past their own threshold
+# (nudge_count / wave2_promoted_at / status checks), so an extra,
+# redundant invocation from Vercel's collapsed daily run firing
+# around the same time as this workflow is a no-op, not a double-send.
+#
+# Setup (one-time, in this repo's GitHub settings):
+#   Settings -> Secrets and variables -> Actions -> New repository secret
+#     CRON_SECRET  = the same value as the CRON_SECRET env var set in
+#                    Vercel's project settings
+#     SITE_URL     = the deployed site's base URL, e.g.
+#                    https://your-club.vercel.app (no trailing slash)
+#
+# Notes on reliability:
+#   - GitHub does not guarantee scheduled workflows fire at the exact
+#     minute -- under load they can be delayed, typically by a few
+#     minutes, occasionally more. That's still far better than "up to
+#     24 hours," but don't expect second-precision.
+#   - GitHub disables scheduled workflows automatically after 60 days
+#     with no other repository activity (a push, a merged PR, etc.).
+#     If reminders/promotions silently stop, check
+#     Actions -> Scheduled match crons for a "workflow disabled"
+#     notice and re-enable it there.
+#   - Private repos get a limited number of free Actions minutes per
+#     month; a 10-minute interval on 2 short jobs can add up. This is
+#     set to run every 15 minutes as a reasonable balance -- tighten
+#     it (e.g. */5 or */10) if the repo is public (unlimited Actions
+#     minutes) or the org has minutes to spare, or loosen it if usage
+#     is a concern.
+on:
+  schedule:
+    - cron: "*/15 * * * *"
+  workflow_dispatch: {}
+
+jobs:
+  run-crons:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check required secrets are configured
+        run: |
+          if [ -z "${{ secrets.CRON_SECRET }}" ] || [ -z "${{ secrets.SITE_URL }}" ]; then
+            echo "::error::CRON_SECRET and/or SITE_URL repository secrets are not set -- see the comment block at the top of this workflow file for setup steps."
+            exit 1
+          fi
+
+      - name: Self-serve wave-2 promotion (self-serve-promote)
+        run: |
+          curl -sS -f -m 30 \
+            -H "Authorization: Bearer ${{ secrets.CRON_SECRET }}" \
+            "${{ secrets.SITE_URL }}/api/cron/self-serve-promote"
+
+      - name: Match nudges / auto-cancel (match-reminders)
+        run: |
+          curl -sS -f -m 30 \
+            -H "Authorization: Bearer ${{ secrets.CRON_SECRET }}" \
+            "${{ secrets.SITE_URL }}/api/cron/match-reminders"
