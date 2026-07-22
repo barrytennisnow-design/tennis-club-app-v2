@@ -8,5 +8,5 @@ export function proposerDisplayName(
 ): string | null {
   if (!player?.first_name) return null;
   const initial = player.last_name?.trim()?.charAt(0);
-  return initial ? `${player.first_name} ${initial}.` : player.first_name;
+  return initial ? `${player.first_name} ${initial}. BAM` : player.first_name;
 }
