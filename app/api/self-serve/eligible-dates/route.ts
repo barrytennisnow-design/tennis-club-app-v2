@@ -10,13 +10,6 @@ import { getSelfServeWindowDays, isWithinSelfServeWindow, isManagerOrCaptain } f
 const STAFF_DATE_HORIZON_DAYS = 30;
 
 export async function GET(request: Request) {
-  const { searchParams } = new URL(request.url);
-  // Whether the organizer plans to include themselves as one of the
-  // players -- affects whether "am I already tied up that day"
-  // should exclude a date. Only meaningful for managers/captains,
-  // who are the only ones allowed to leave themselves out at all.
-  const includeSelf = searchParams.get("include_self") !== "false";
-
   const supabase = createClient();
   const { data: userData } = await supabase.auth.getUser();
   if (!userData.user) return NextResponse.json({ error: "Not authenticated" }, { status: 401 });
@@ -54,16 +47,27 @@ export async function GET(request: Request) {
     return NextResponse.json({ optedIn: true, dates: [], canInviteAnyRoster: isStaff, isStaff });
   }
 
-  // Drop any date where the organizer is already tied up in a
-  // draft/proposed/confirmed match -- only relevant if they're
-  // planning to be a player themselves.
+  // Regular (non-staff) players are always one of the players in the
+  // match they're building, so drop any date where they're already
+  // tied up in a proposed/confirmed match. A draft doesn't count --
+  // it's just an unproposed sketch on the matrix, nothing's actually
+  // been sent to anyone, so those players are still free to build a
+  // self-serve match until something is actually proposed.
+  //
+  // Managers/captains are NOT filtered by their own schedule here:
+  // they can organize a match for any date in the horizon whether or
+  // not they intend to play in it, and whether or not they're free
+  // that day. Whether they can additionally join AS a player on a
+  // given date is decided later, once a date is picked (see
+  // open-players/route.ts) -- their own name simply won't be offered
+  // as a selectable player on a date they're already committed to.
   let dates = candidateDates;
-  if (includeSelf) {
+  if (!isStaff) {
     const { data: assignedRows } = await admin
       .from("match_players")
       .select("matches!inner(match_date, status)")
       .eq("player_id", me.id)
-      .in("matches.status", ["draft", "proposed", "confirmed"])
+      .in("matches.status", ["proposed", "confirmed"])
       .in("matches.match_date", candidateDates);
     const assignedDates = new Set((assignedRows ?? []).map((r: any) => r.matches.match_date));
     dates = candidateDates.filter((d: string) => !assignedDates.has(d));

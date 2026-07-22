@@ -11,6 +11,13 @@ export default function BuildMatchPage() {
   const [loading, setLoading] = useState(true);
   const [optedIn, setOptedIn] = useState(false);
   const [isStaff, setIsStaff] = useState(false);
+  // Whether the organizer is (or will be) one of the players in this
+  // match. For a regular player this is always true and can't be
+  // changed -- they're forced in as the first player, shown locked in
+  // the player list below. For a manager/captain it starts true and
+  // toggles off/on by clicking their own name in that same list, same
+  // as toggling any other candidate -- see the self-chip rendering
+  // further down.
   const [includeSelf, setIncludeSelf] = useState(true);
   const [dates, setDates] = useState<string[]>([]);
   const [staffDate, setStaffDate] = useState("");
@@ -29,9 +36,9 @@ export default function BuildMatchPage() {
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
 
-  async function loadDates(includeSelfParam: boolean) {
+  async function loadDates() {
     setLoading(true);
-    const res = await fetch(`/api/self-serve/eligible-dates?include_self=${includeSelfParam}`);
+    const res = await fetch(`/api/self-serve/eligible-dates`);
     const json = await res.json();
     setOptedIn(!!json.optedIn);
     setIsStaff(!!json.isStaff);
@@ -40,7 +47,7 @@ export default function BuildMatchPage() {
   }
 
   useEffect(() => {
-    loadDates(true);
+    loadDates();
     (async () => {
       const { data: courtRows } = await supabase.from("courts").select("*").eq("is_active", true).order("sort_order").order("name");
       setCourts(courtRows ?? []);
@@ -53,22 +60,12 @@ export default function BuildMatchPage() {
     })();
   }, []);
 
-  // Re-check eligible dates whenever the manager/captain toggles
-  // whether they're playing themselves -- "am I already tied up
-  // that day" only applies if they're one of the players.
-  function toggleIncludeSelf(value: boolean) {
-    setIncludeSelf(value);
-    setSelectedDate(null);
-    setStaffDate("");
-    loadDates(value);
-  }
-
   async function fetchPlayers(date: string) {
     setAvailableIds([]);
     setOtherIds([]);
     setError(null);
     setPlayersLoading(true);
-    const res = await fetch(`/api/self-serve/open-players?date=${date}&include_self=${includeSelf}`);
+    const res = await fetch(`/api/self-serve/open-players?date=${date}`);
     const json = await res.json();
     setPlayersLoading(false);
     if (!json.ok) {
@@ -76,7 +73,15 @@ export default function BuildMatchPage() {
       setOpenPlayers([]);
       return;
     }
-    setOpenPlayers(json.players ?? []);
+    const players = json.players ?? [];
+    setOpenPlayers(players);
+    // A regular player is always included. A manager/captain defaults
+    // to included, but only if they're actually offered as a
+    // selectable player for this date (i.e. not already tied up in a
+    // proposed/confirmed match that day) -- otherwise force it off,
+    // since there's no valid way to include them.
+    const selfIsSelectable = players.some((p: any) => p.is_self);
+    setIncludeSelf(!isStaff ? true : selfIsSelectable);
   }
 
   async function pickDate(date: string) {
@@ -132,7 +137,7 @@ export default function BuildMatchPage() {
     setAvailableIds([]);
     setOtherIds([]);
     setOpenPlayers([]);
-    loadDates(includeSelf);
+    loadDates();
   }
 
   if (loading) return <p>Loading...</p>;
@@ -148,8 +153,10 @@ export default function BuildMatchPage() {
     );
   }
 
-  const availablePlayers = openPlayers.filter((p) => p.available);
-  const otherPlayers = openPlayers.filter((p) => !p.available);
+  const selfPlayer = openPlayers.find((p) => p.is_self) ?? null;
+  const candidatePlayers = openPlayers.filter((p) => !p.is_self);
+  const availablePlayers = candidatePlayers.filter((p) => p.available);
+  const otherPlayers = candidatePlayers.filter((p) => !p.available);
 
   return (
     <div className="space-y-4">
@@ -158,18 +165,11 @@ export default function BuildMatchPage() {
         Pick a day, say how many players the match needs (2 or 4 total), then invite as many candidates
         as you like — you can invite more than you need. Whoever accepts first fills the spots.
         {isStaff
-          ? " As a manager/captain, you can organize a match for any upcoming date, and choose below whether you're one of the players."
+          ? " As a manager/captain, you can organize a match for any upcoming date. Once you pick a day, your own name shows up in the player list below — select it if you want to play, leave it unselected to just organize."
           : " You're automatically included as one of the players, since you're proposing."}
         {" "}If two people try to grab the same player or day at once, whoever submits first gets it —
         the other will be asked to pick again.
       </p>
-
-      {isStaff && (
-        <label className="flex items-center gap-2 text-sm font-medium">
-          <input type="checkbox" checked={includeSelf} onChange={(e) => toggleIncludeSelf(e.target.checked)} />
-          Include me as one of the players
-        </label>
-      )}
 
       {success && <p className="rounded bg-green-50 p-2 text-sm text-green-700">{success}</p>}
       {error && <p className="rounded bg-red-50 p-2 text-sm text-red-700">{error}</p>}
@@ -194,9 +194,7 @@ export default function BuildMatchPage() {
             Continue
           </button>
           {staffDate && !dates.includes(staffDate) && (
-            <p className="text-sm text-amber-700">
-              {includeSelf ? "You're already in a match that day — uncheck \"Include me\" or pick another date." : "That date isn't available."}
-            </p>
+            <p className="text-sm text-amber-700">That date isn't available.</p>
           )}
         </div>
       )}
@@ -245,6 +243,43 @@ export default function BuildMatchPage() {
                 </button>
               ))}
             </div>
+          </div>
+
+          <div>
+            <p className="mb-1 text-sm font-medium">You</p>
+            {!isStaff && (
+              <p className="mb-2 text-xs text-stone-500">You're proposing this match, so you're always one of the players.</p>
+            )}
+            {isStaff && (
+              <p className="mb-2 text-xs text-stone-500">
+                {selfPlayer
+                  ? "Select your name if you want to play in this match too. Leave it unselected to just organize."
+                  : "You're already in a match that day, so you can't be added as a player — this match will be for other players only."}
+              </p>
+            )}
+            {selfPlayer && (
+              <div className="flex flex-wrap gap-2">
+                {isStaff ? (
+                  <button
+                    onClick={() => setIncludeSelf((v) => !v)}
+                    className={`rounded-md border px-3 py-1.5 text-sm ${
+                      includeSelf
+                        ? "border-court-green bg-court-green text-white"
+                        : "border-stone-300 hover:bg-stone-50"
+                    }`}
+                  >
+                    {selfPlayer.first_name} {selfPlayer.last_name} (you)
+                  </button>
+                ) : (
+                  <span
+                    aria-disabled="true"
+                    className="cursor-not-allowed rounded-md border border-court-green bg-court-green px-3 py-1.5 text-sm text-white"
+                  >
+                    ✓ {selfPlayer.first_name} {selfPlayer.last_name} (you)
+                  </span>
+                )}
+              </div>
+            )}
           </div>
 
           <div>

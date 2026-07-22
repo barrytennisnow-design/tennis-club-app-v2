@@ -27,15 +27,28 @@ export interface GenerateMatchesParams {
 // Shared by generateMatches (below) and the self-serve match-builder
 // API route -- ANY new match, regardless of who/what creates it,
 // needs the same "next number after the highest visible one" logic.
-// This exact logic has already had two numbering bugs fixed in it
-// (counting stale draft/cancelled rows, and non-chronological
-// assignment order) -- duplicating it elsewhere risks reintroducing
-// either one.
+// This exact logic has already had numbering bugs fixed in it
+// (non-chronological assignment order, and -- the latest one --
+// draft matches being left out of the lookup) -- duplicating it
+// elsewhere risks reintroducing any of them.
+//
+// Draft matches on the Match Matrix already occupy a real, visible
+// number. Excluding status='draft' from this lookup (as an earlier
+// version did) meant a self-serve proposal, or another
+// generateMatches run, could hand out a number a draft was already
+// using. The collision stayed invisible until someone clicked
+// "Propose" on that draft -- at which point the Match Matrix and the
+// Manage Matches page both showed two different matches labeled with
+// the same number. Including drafts here costs nothing: drafts are
+// numbered by generateMatches too, and generateMatches always wipes
+// its own stale drafts right after calling this, so at worst a
+// freshly-regenerated batch starts a little higher than strictly
+// necessary -- harmless, since match numbers only need to be unique,
+// not gapless.
 export async function getNextMatchNumber(supabaseAdmin: any): Promise<number> {
   const { data: maxMatch } = await supabaseAdmin
     .from("matches")
     .select("match_number")
-    .neq("status", "draft")
     .order("match_number", { ascending: false })
     .limit(1)
     .maybeSingle();
@@ -43,15 +56,17 @@ export async function getNextMatchNumber(supabaseAdmin: any): Promise<number> {
 }
 
 export async function generateMatches({ supabaseAdmin, startDate, endDate }: GenerateMatchesParams) {
-  // Number the new batch starting from the highest match_number ever
-  // assigned to a proposed, confirmed, OR cancelled match. Match
-  // numbers are unique and must never be reused -- a cancelled match
-  // stays permanently visible on the Matches page under its original
-  // number, so handing that same number to a new match would put two
-  // different matches on screen both labeled e.g. "M3". Only drafts
-  // are excluded: they're this function's own scratch pad, wiped and
-  // rebuilt every run, and never held a number that needs protecting.
-  // If there are no non-draft matches at all, numbering restarts at M1.
+  // Number the new batch starting from the highest match_number
+  // assigned to ANY existing match, including drafts still sitting on
+  // the Match Matrix. Match numbers are unique and must never be
+  // reused -- a cancelled match stays permanently visible on the
+  // Matches page under its original number, and a draft is visible
+  // and clickable-to-propose right now, so handing either of their
+  // numbers to a new match would put two different matches on screen
+  // both labeled e.g. "M3". The stale drafts queried just below are
+  // about to be wiped, so factoring their numbers in here only ever
+  // costs a few skipped numbers, never a collision. If there are no
+  // matches at all, numbering restarts at M1.
   let nextMatchNumber = await getNextMatchNumber(supabaseAdmin);
 
   // Wipe existing DRAFT matches so this run starts clean. Cancelled
