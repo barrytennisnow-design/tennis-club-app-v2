@@ -35,7 +35,7 @@ export async function POST(request: Request) {
   const { data: match } = await admin
     .from("matches")
     .select(
-      "*, court:courts(name, address), proposer:players!proposed_by(first_name, last_name), match_players(id, player_id, created_at, response_status, players(first_name, last_name, email, phone, access_token))"
+      "*, court:courts(name, address), proposer:players!proposed_by(first_name, last_name, role), match_players(id, player_id, created_at, response_status, players(first_name, last_name, email, phone, access_token))"
     )
     .eq("id", match_id)
     .single();
@@ -71,12 +71,24 @@ export async function POST(request: Request) {
         .from("match_invite_pool")
         .select("wave, players(first_name, last_name)")
         .eq("match_id", match_id);
-      const availableNames = (poolRows ?? [])
+      let availableNames = (poolRows ?? [])
         .filter((r: any) => r.wave === 1 && r.players)
         .map((r: any) => `${r.players.first_name} ${r.players.last_name}`);
       const otherNames = (poolRows ?? [])
         .filter((r: any) => r.wave === 2 && r.players)
         .map((r: any) => `${r.players.first_name} ${r.players.last_name}`);
+
+      // A manager/captain organizer who put themselves in the match
+      // always shows as "available", regardless of the availability
+      // page -- matches the real send logic in lib/selfServe.ts.
+      const proposerIsStaff = match.proposer?.role === "manager" || match.proposer?.role === "captain";
+      const proposerInRoster = match.match_players.some((mp: any) => mp.player_id === match.proposed_by);
+      if (proposerIsStaff && proposerInRoster && match.proposer) {
+        const proposerFullName = `${match.proposer.first_name} ${match.proposer.last_name}`;
+        if (!availableNames.includes(proposerFullName)) {
+          availableNames = [proposerFullName, ...availableNames];
+        }
+      }
       ({ subject, html } = selfServeInviteEmail({
         matchNumber: match.match_number,
         firstName: me.first_name,

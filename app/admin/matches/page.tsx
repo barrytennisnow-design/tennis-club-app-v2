@@ -173,14 +173,20 @@ export default function AdminMatchesPage() {
                       "—"
                     ) : (
                       <div className="space-y-0.5">
-                        {rosterPlayers.map((mp: any, i: number) => (
-                          <div key={mp.id ?? i}>
-                            {mp.players ? `${mp.players.first_name} ${mp.players.last_name}` : "Unknown Player"}
-                            {m.status !== "draft" && (
-                              <span className="text-stone-400"> : {mp.response_status.toUpperCase()}</span>
-                            )}
-                          </div>
-                        ))}
+                        {rosterPlayers.map((mp: any, i: number) => {
+                          const statusColorClass =
+                            mp.response_status === "proposed" ? "font-bold text-red-600" :
+                            mp.response_status === "accepted" ? "font-bold text-green-600" :
+                            "text-stone-400";
+                          return (
+                            <div key={mp.id ?? i}>
+                              {mp.players ? `${mp.players.first_name} ${mp.players.last_name}` : "Unknown Player"}
+                              {m.status !== "draft" && (
+                                <span className={statusColorClass}> : {mp.response_status.toUpperCase()}</span>
+                              )}
+                            </div>
+                          );
+                        })}
                         {isLiveBamMatch && (
                           <div className="pt-0.5 text-[11px] text-stone-500">
                             {acceptedCount}/{m.target_size} accepted

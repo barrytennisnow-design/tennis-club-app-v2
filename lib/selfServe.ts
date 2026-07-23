@@ -140,7 +140,7 @@ export async function sendWaveInvites(admin: any, matchId: string, playerIds: st
 
   const { data: match } = await admin
     .from("matches")
-    .select("id, match_number, match_date, time_display, time_slot, proposed_at, target_size, court:courts(name), proposer:players!proposed_by(first_name, last_name)")
+    .select("id, match_number, match_date, time_display, time_slot, proposed_at, target_size, proposed_by, court:courts(name), proposer:players!proposed_by(first_name, last_name, role)")
     .eq("id", matchId)
     .single();
   if (!match) return;
@@ -197,6 +197,23 @@ export async function sendWaveInvites(admin: any, matchId: string, playerIds: st
     otherNames = (poolRows ?? [])
       .filter((r: any) => r.wave === 2 && r.players)
       .map((r: any) => `${r.players.first_name} ${r.players.last_name}`);
+
+    // A manager/captain who organized the match AND put themselves in
+    // it as a player should always be listed among the "available"
+    // players being asked to confirm -- even if they personally never
+    // marked that day available on the availability page. Their own
+    // decision to play the match makes that moot; the invite pool
+    // (built from wave1Ids/wave2Ids in propose/route.ts) never
+    // includes the proposer at all, so without this they'd be left
+    // off the explainer paragraph entirely.
+    const proposerIsStaff = isManagerOrCaptain(match.proposer?.role);
+    const proposerInRoster = (allMps ?? []).some((mp: any) => mp.player_id === match.proposed_by);
+    if (proposerIsStaff && proposerInRoster && match.proposer) {
+      const proposerFullName = `${match.proposer.first_name} ${match.proposer.last_name}`;
+      if (!availableNames.includes(proposerFullName)) {
+        availableNames = [proposerFullName, ...availableNames];
+      }
+    }
   }
 
   for (const pid of emailRecipientIds) {
