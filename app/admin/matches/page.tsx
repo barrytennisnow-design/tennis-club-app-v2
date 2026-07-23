@@ -27,7 +27,7 @@ export default function AdminMatchesPage() {
   async function load() {
     const { data } = await supabase
       .from("matches")
-      .select("*, court:courts(id, name), proposer:players!proposed_by(first_name, last_name), match_players(id, response_status, decline_reason, player_id, players(id, first_name, last_name))")
+      .select("*, court:courts(id, name), proposer:players!proposed_by(first_name, last_name), match_players(id, response_status, decline_reason, player_id, created_at, players(id, first_name, last_name))")
       .not("status", "eq", "draft")
       .order("proposed_at", { ascending: false });
     setMatches(data ?? []);
@@ -127,10 +127,7 @@ export default function AdminMatchesPage() {
               <th className="p-2">Day</th>
               <th className="p-2">Time</th>
               <th className="p-2">Court</th>
-              <th className="p-2">Player 1</th>
-              <th className="p-2">Player 2</th>
-              <th className="p-2">Player 3</th>
-              <th className="p-2">Player 4</th>
+              <th className="p-2">Players</th>
               <th className="p-2">Status</th>
               <th className="p-2">Proposed</th>
               <th className="p-2">Confirmed</th>
@@ -147,31 +144,51 @@ export default function AdminMatchesPage() {
                 m.status === "proposed" ? "bg-yellow-50" :
                 m.status === "cancelled" ? "bg-red-50" :
                 "bg-stone-50";
-              const players = [0, 1, 2, 3].map((i) => m.match_players[i]);
+              // BAM (self-serve/target_size) matches while still
+              // "proposed" are a live, moving roster -- players get
+              // added as wave 2 gets promoted or someone accepts, and
+              // per the requested workflow a decline should just drop
+              // that name from view here (no dead weight cluttering
+              // the "who do we still need" picture), unlike the Match
+              // Matrix's permanent per-day history which keeps
+              // declines visible. Confirmed/cancelled BAM matches, and
+              // every classic match, keep the full historical roster.
+              const isLiveBamMatch = !!m.target_size && m.status === "proposed";
+              const rosterPlayers = (m.match_players ?? [])
+                .filter((mp: any) => !(isLiveBamMatch && mp.response_status === "declined"))
+                .sort((a: any, b: any) => new Date(a.created_at ?? 0).getTime() - new Date(b.created_at ?? 0).getTime());
+              const acceptedCount = (m.match_players ?? []).filter((mp: any) => mp.response_status === "accepted").length;
               return (
                 <tr key={m.id} className={`border-t ${rowColor}`}>
                   <td className="p-2 font-mono">M{m.match_number}</td>
-                  <td className="p-2">{proposerDisplayName(m.proposer) ?? "Manager"}</td>
+                  <td className="p-2">{proposerDisplayName(m.proposer, m.target_size) ?? "Manager"}</td>
                   <td className="p-2 whitespace-nowrap leading-tight">
                     <div>{formatShortDateWithWeekday(m.match_date).split(" ")[0]}</div>
                     <div>{formatShortDate(m.match_date)}</div>
                   </td>
                   <td className="p-2">{m.time_display || defaultTimeDisplay || m.time_slot}</td>
                   <td className="p-2">{m.court?.name ?? "TBD"}</td>
-                  {players.map((mp: any, i: number) => (
-                    <td key={i} className="p-2">
-                      {mp ? (
-                        <>
-                          {mp.players ? `${mp.players.first_name} ${mp.players.last_name}` : 'Unknown Player'}
-                          {m.status !== "draft" && (
-                            <span className="text-stone-400"> : {mp.response_status.toUpperCase()}</span>
-                          )}
-                        </>
-                      ) : (
-                        "—"
-                      )}
-                    </td>
-                  ))}
+                  <td className="p-2">
+                    {rosterPlayers.length === 0 ? (
+                      "—"
+                    ) : (
+                      <div className="space-y-0.5">
+                        {rosterPlayers.map((mp: any, i: number) => (
+                          <div key={mp.id ?? i}>
+                            {mp.players ? `${mp.players.first_name} ${mp.players.last_name}` : "Unknown Player"}
+                            {m.status !== "draft" && (
+                              <span className="text-stone-400"> : {mp.response_status.toUpperCase()}</span>
+                            )}
+                          </div>
+                        ))}
+                        {isLiveBamMatch && (
+                          <div className="pt-0.5 text-[11px] text-stone-500">
+                            {acceptedCount}/{m.target_size} accepted
+                          </div>
+                        )}
+                      </div>
+                    )}
+                  </td>
                   <td className="p-2">
                     <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${MATCH_STATUS_STYLES[m.status] ?? "bg-stone-200 text-stone-700"}`}>
                       {matchStatusLabel(m.status)}
@@ -245,7 +262,7 @@ export default function AdminMatchesPage() {
               );
             })}
             {matches.length === 0 && (
-              <tr><td colSpan={16} className="p-4 text-center text-stone-400">No matches yet.</td></tr>
+              <tr><td colSpan={13} className="p-4 text-center text-stone-400">No matches yet.</td></tr>
             )}
           </tbody>
         </table>

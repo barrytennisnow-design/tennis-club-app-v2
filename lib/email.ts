@@ -157,6 +157,98 @@ export function matchProposedEmail({
   };
 }
 
+// Build-a-Match (self-serve, target_size 2 or 4) invite email --
+// deliberately separate from matchProposedEmail above rather than a
+// branch inside it, because the content this needs to say is
+// genuinely different: it names an exact singles/doubles match type,
+// and -- when the proposer invited more candidates than the match
+// needs -- is upfront about the WHOLE invite plan, not just "you've
+// been proposed." Sent to a recipient in either wave (see `wave`):
+// wave 1 (marked available that day, invited immediately) or wave 2
+// (not marked available, only asked once wave 1 hasn't filled the
+// match in time). Both waves see the same full picture -- who
+// marked available and is being asked to confirm, and who else is
+// being asked in case more players are needed -- just worded from
+// their own side of that list.
+export function selfServeInviteEmail({
+  matchNumber,
+  firstName,
+  matchDate,
+  timeSlot,
+  courtName,
+  targetSize,
+  wave,
+  availableNames,
+  otherNames,
+  roster,
+  acceptUrl,
+  conflictNote,
+  proposedByName,
+}: {
+  matchNumber: number | string;
+  firstName: string;
+  matchDate: string;
+  timeSlot: string;
+  courtName: string;
+  targetSize: 2 | 4;
+  wave: 1 | 2;
+  availableNames: string[];
+  otherNames: string[];
+  roster: RosterEntry[];
+  acceptUrl: string;
+  conflictNote?: string | null;
+  proposedByName?: string | null;
+}) {
+  const matchType = targetSize === 2 ? "singles" : "doubles";
+  const displayDate = formatShortDate(matchDate);
+  const shortHanded = otherNames.length > 0;
+
+  const introLine =
+    wave === 1
+      ? `You've been invited to a ${matchType} match on ${displayDate}.`
+      : `You're being asked to help fill a ${matchType} match on ${displayDate}.`;
+
+  let explainerHtml = "";
+  if (shortHanded) {
+    const availableList = availableNames.length ? availableNames.join(", ") : "no one yet";
+    const otherList = otherNames.join(", ");
+    explainerHtml =
+      wave === 1
+        ? `<p>We may be short on players who marked themselves available that day, so we're also asking a
+           few players who haven't as a backup, in case we need them. The available players being asked to
+           confirm are: <strong>${availableList}</strong>. The system is also asking the following players who
+           were not marked as available: <strong>${otherList}</strong>. If and when enough players accept this
+           match, on a first-come basis, it will be confirmed.</p>`
+        : `<p>The available players who marked themselves free that day were asked first: <strong>${availableList}</strong>.
+           Not enough of them have accepted yet, so we're also asking you and a few other players who weren't
+           marked as available: <strong>${otherList}</strong>. If and when enough players accept this match, on a
+           first-come basis, it will be confirmed.</p>`;
+  }
+
+  const details = formatMatchDetailsText({
+    matchNumber,
+    statusLabel: `PROPOSED (BAM${targetSize})`,
+    matchDate,
+    timeSlot,
+    courtName,
+    roster,
+    footerLines: [`match created by: ${proposedByName ?? "a club member"}`],
+  });
+
+  return {
+    subject: `You're invited: ${matchType} match on ${displayDate}${shortHanded ? " (need players)" : ""}`,
+    html: `
+      <p>Hi ${firstName},</p>
+      <p>${introLine}</p>
+      ${explainerHtml}
+      <pre style="font-family:monospace;white-space:pre-wrap;font-size:13px;">${details}</pre>
+      ${conflictNote ? `<p style="color:#b45309;"><strong>⚠️ Possible conflict:</strong> ${conflictNote}</p>` : ""}
+      <p>Please click below ASAP to accept this match -- spots go to whoever responds first.</p>
+      <p><a href="${acceptUrl}" style="display:inline-block;padding:8px 16px;background:#2d5a3d;color:#ffffff;border-radius:6px;text-decoration:none;">Accept or Decline this Match</a></p>
+    `,
+  };
+}
+
 export function matchNudgeEmail({
   matchNumber,
   firstName,

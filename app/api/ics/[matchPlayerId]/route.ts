@@ -20,7 +20,7 @@ export async function GET(request: Request, { params }: { params: { matchPlayerI
   const { data: mp } = await admin
     .from("match_players")
     .select(
-      "player_id, matches!inner(id, match_number, match_date, time_slot, time_display, status, confirmed_at, court:courts(name, address), proposer:players!proposed_by(first_name, last_name), match_players(player_id, response_status, players(first_name, last_name, phone)))"
+      "player_id, matches!inner(id, match_number, match_date, time_slot, time_display, status, target_size, confirmed_at, court:courts(name, address), proposer:players!proposed_by(first_name, last_name), match_players(player_id, response_status, players(first_name, last_name, phone)))"
     )
     .eq("id", params.matchPlayerId)
     .single();
@@ -51,7 +51,7 @@ export async function GET(request: Request, { params }: { params: { matchPlayerI
     roster,
     courtAddress: match.court?.address ?? null,
     confirmedAt: match.confirmed_at ?? undefined,
-    proposedByName: proposerDisplayName(match.proposer),
+    proposedByName: proposerDisplayName(match.proposer, match.target_size),
   });
 
   return new NextResponse(ics, {

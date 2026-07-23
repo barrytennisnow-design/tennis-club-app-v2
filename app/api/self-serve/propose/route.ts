@@ -175,7 +175,7 @@ export async function POST(request: Request) {
     ...wave2Ids.map((pid) => ({ match_id: newMatch.id, player_id: pid, wave: 2, status: "pending" as const })),
   ]);
 
-  await sendWaveInvites(admin, newMatch.id, wave1Ids);
+  await sendWaveInvites(admin, newMatch.id, wave1Ids, 1);
 
   return NextResponse.json({ ok: true, matchNumber, invited: wave1Ids.length, waitingOnWave2: wave2Ids.length });
 }

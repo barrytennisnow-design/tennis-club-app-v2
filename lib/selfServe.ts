@@ -14,7 +14,7 @@
 // First to accept, first to play; the rest get withdrawn once the
 // match is full.
 
-import { sendEmail, matchProposedEmail, matchConfirmedEmail, matchCancelledEmail, matchSpotFilledEmail } from "@/lib/email";
+import { sendEmail, matchProposedEmail, selfServeInviteEmail, matchConfirmedEmail, matchCancelledEmail, matchSpotFilledEmail } from "@/lib/email";
 import { getEmailTestModeSettings, applyFirstOnlyFilter } from "@/lib/emailTestMode";
 import { getDefaultTimeDisplay, resolveTimeDisplay } from "@/lib/timeDisplay";
 import { checkSameDayConflict } from "@/lib/conflict";
@@ -128,12 +128,19 @@ export async function getAssignedPlayerIds(supabaseAdmin: any, date: string): Pr
 // because from their point of view it is one. Shared by the initial
 // propose (wave 1), an early wave-2 promotion triggered by wave 1
 // fully responding, and the 8-hour cron.
-export async function sendWaveInvites(admin: any, matchId: string, playerIds: string[]): Promise<void> {
+//
+// `wave` is which wave THIS batch of playerIds belongs to (always
+// uniform within one call -- a single sendWaveInvites call is either
+// "sending wave 1" or "sending/promoting wave 2", never a mix). It's
+// used only to word the email from the right side of the invite
+// list; the actual invite-pool bookkeeping below doesn't need it,
+// since match_invite_pool already has its own `wave` column per row.
+export async function sendWaveInvites(admin: any, matchId: string, playerIds: string[], wave: 1 | 2): Promise<void> {
   if (playerIds.length === 0) return;
 
   const { data: match } = await admin
     .from("matches")
-    .select("id, match_number, match_date, time_display, time_slot, proposed_at, court:courts(name), proposer:players!proposed_by(first_name, last_name)")
+    .select("id, match_number, match_date, time_display, time_slot, proposed_at, target_size, court:courts(name), proposer:players!proposed_by(first_name, last_name)")
     .eq("id", matchId)
     .single();
   if (!match) return;
@@ -167,7 +174,30 @@ export async function sendWaveInvites(admin: any, matchId: string, playerIds: st
   const testMode = await getEmailTestModeSettings(admin);
   const emailRecipientIds = applyFirstOnlyFilter(playerIds, testMode);
   const siteUrl = process.env.NEXT_PUBLIC_SITE_URL ?? "";
-  const proposedByName = proposerDisplayName(match.proposer) ?? "a club member";
+  const proposedByName = proposerDisplayName(match.proposer, match.target_size) ?? "a club member";
+
+  // For self-serve (target_size) matches, gather the FULL invite pool
+  // -- both waves, regardless of whether wave 2 has actually been
+  // sent yet -- so the email can be fully transparent about the
+  // whole invite plan: who marked available and is being asked to
+  // confirm right now, and who else is lined up as backup. This is
+  // what lets a wave-1 invitee's email say "we're also asking these
+  // other players" even though wave 2 hasn't been sent at the time
+  // wave 1 gets emailed.
+  let availableNames: string[] = [];
+  let otherNames: string[] = [];
+  if (match.target_size) {
+    const { data: poolRows } = await admin
+      .from("match_invite_pool")
+      .select("wave, players(first_name, last_name)")
+      .eq("match_id", matchId);
+    availableNames = (poolRows ?? [])
+      .filter((r: any) => r.wave === 1 && r.players)
+      .map((r: any) => `${r.players.first_name} ${r.players.last_name}`);
+    otherNames = (poolRows ?? [])
+      .filter((r: any) => r.wave === 2 && r.players)
+      .map((r: any) => `${r.players.first_name} ${r.players.last_name}`);
+  }
 
   for (const pid of emailRecipientIds) {
     const player = (playerRows ?? []).find((p: any) => p.id === pid);
@@ -176,18 +206,34 @@ export async function sendWaveInvites(admin: any, matchId: string, playerIds: st
     const acceptUrl = player.access_token
       ? `${siteUrl}/access/${player.access_token}?next=${encodeURIComponent(`/matches#match-${matchId}`)}`
       : `${siteUrl}/matches`;
-    const { subject, html } = matchProposedEmail({
-      matchNumber: match.match_number,
-      firstName: player.first_name,
-      matchDate: match.match_date,
-      timeSlot: timeDisplay,
-      courtName: match.court?.name ?? "Court TBD",
-      roster,
-      proposedAt: match.proposed_at,
-      acceptUrl,
-      conflictNote,
-      proposedByName,
-    });
+    const { subject, html } = match.target_size
+      ? selfServeInviteEmail({
+          matchNumber: match.match_number,
+          firstName: player.first_name,
+          matchDate: match.match_date,
+          timeSlot: timeDisplay,
+          courtName: match.court?.name ?? "Court TBD",
+          targetSize: match.target_size,
+          wave,
+          availableNames,
+          otherNames,
+          roster,
+          acceptUrl,
+          conflictNote,
+          proposedByName,
+        })
+      : matchProposedEmail({
+          matchNumber: match.match_number,
+          firstName: player.first_name,
+          matchDate: match.match_date,
+          timeSlot: timeDisplay,
+          courtName: match.court?.name ?? "Court TBD",
+          roster,
+          proposedAt: match.proposed_at,
+          acceptUrl,
+          conflictNote,
+          proposedByName,
+        });
     await sendEmail({ supabaseAdmin: admin, to: player.email, subject, html });
     await notifyPlayer({
       admin,
@@ -265,7 +311,7 @@ export async function promoteWave2(admin: any, matchId: string): Promise<{ promo
   if (ids.length === 0) return { promoted: 0 };
 
   await admin.from("matches").update({ wave2_promoted_at: new Date().toISOString() }).eq("id", matchId);
-  await sendWaveInvites(admin, matchId, ids);
+  await sendWaveInvites(admin, matchId, ids, 2);
   return { promoted: ids.length };
 }
 
@@ -300,7 +346,7 @@ export async function cancelExhaustedMatch(admin: any, matchId: string, reason: 
     (a: any, b: any) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime()
   );
   const emailRecipients = applyFirstOnlyFilter(sortedMatchPlayers, testMode);
-  const proposedByName = proposerDisplayName(updatedMatch.proposer) ?? "Manager";
+  const proposedByName = proposerDisplayName(updatedMatch.proposer, updatedMatch.target_size) ?? "Manager";
 
   for (const mp of emailRecipients) {
     if (!mp.players) continue;
@@ -346,7 +392,7 @@ export async function sendOverflowConfirmedEmails(admin: any, matchId: string): 
     phone: mp.players?.phone ?? null,
   }));
   const confirmedAt = updatedMatch.confirmed_at ?? new Date().toISOString();
-  const proposedByName = proposerDisplayName(updatedMatch.proposer) ?? "Manager";
+  const proposedByName = proposerDisplayName(updatedMatch.proposer, updatedMatch.target_size) ?? "Manager";
   const defaultTimeDisplay = await getDefaultTimeDisplay(admin);
   const timeDisplay = resolveTimeDisplay(updatedMatch, defaultTimeDisplay);
   const ics = buildMatchIcs({

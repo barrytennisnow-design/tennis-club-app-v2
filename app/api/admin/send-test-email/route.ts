@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { createClient, createAdminClient } from "@/lib/supabaseServer";
-import { sendEmail, matchProposedEmail, matchConfirmedEmail, matchCancelledEmail } from "@/lib/email";
+import { sendEmail, matchProposedEmail, selfServeInviteEmail, matchConfirmedEmail, matchCancelledEmail } from "@/lib/email";
 import { buildMatchIcs } from "@/lib/ics";
 import { getDefaultTimeDisplay, resolveTimeDisplay } from "@/lib/timeDisplay";
 import { proposerDisplayName } from "@/lib/formatName";
@@ -44,7 +44,7 @@ export async function POST(request: Request) {
 
   const defaultTimeDisplay = await getDefaultTimeDisplay(admin);
   const timeDisplay = resolveTimeDisplay(match, defaultTimeDisplay);
-  const proposedByName = proposerDisplayName(match.proposer) ?? proposerDisplayName(me) ?? "Manager";
+  const proposedByName = proposerDisplayName(match.proposer, match.target_size) ?? proposerDisplayName(me, match.target_size) ?? "Manager";
   const roster = match.match_players
     .filter((mp: any) => mp.players)
     .map((mp: any) => ({
@@ -63,17 +63,47 @@ export async function POST(request: Request) {
     const acceptUrl = firstPlayer?.players?.access_token
       ? `${siteUrl}/access/${firstPlayer.players.access_token}?next=${encodeURIComponent(`/matches#match-${match_id}`)}`
       : `${siteUrl}/matches`;
-    ({ subject, html } = matchProposedEmail({
-      matchNumber: match.match_number,
-      firstName: me.first_name,
-      matchDate: match.match_date,
-      timeSlot: timeDisplay,
-      courtName: match.court?.name ?? "Court TBD",
-      roster,
-      proposedAt: match.proposed_at ?? new Date().toISOString(),
-      acceptUrl,
-      proposedByName,
-    }));
+    if (match.target_size) {
+      // Preview the ACTUAL email a Build-a-Match invitee gets, not
+      // the classic one -- otherwise this preview tool would
+      // misrepresent what self-serve players actually receive.
+      const { data: poolRows } = await admin
+        .from("match_invite_pool")
+        .select("wave, players(first_name, last_name)")
+        .eq("match_id", match_id);
+      const availableNames = (poolRows ?? [])
+        .filter((r: any) => r.wave === 1 && r.players)
+        .map((r: any) => `${r.players.first_name} ${r.players.last_name}`);
+      const otherNames = (poolRows ?? [])
+        .filter((r: any) => r.wave === 2 && r.players)
+        .map((r: any) => `${r.players.first_name} ${r.players.last_name}`);
+      ({ subject, html } = selfServeInviteEmail({
+        matchNumber: match.match_number,
+        firstName: me.first_name,
+        matchDate: match.match_date,
+        timeSlot: timeDisplay,
+        courtName: match.court?.name ?? "Court TBD",
+        targetSize: match.target_size,
+        wave: 1,
+        availableNames,
+        otherNames,
+        roster,
+        acceptUrl,
+        proposedByName,
+      }));
+    } else {
+      ({ subject, html } = matchProposedEmail({
+        matchNumber: match.match_number,
+        firstName: me.first_name,
+        matchDate: match.match_date,
+        timeSlot: timeDisplay,
+        courtName: match.court?.name ?? "Court TBD",
+        roster,
+        proposedAt: match.proposed_at ?? new Date().toISOString(),
+        acceptUrl,
+        proposedByName,
+      }));
+    }
   } else if (kind === "confirmed") {
     const confirmedAt = match.confirmed_at ?? new Date().toISOString();
     const playerNames = roster.map((r: any) => r.name);

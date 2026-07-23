@@ -523,10 +523,13 @@ export default function MatchMatrixPage() {
                   // A self-serve (target_size) match never actually
                   // cancels on a decline -- the system just keeps
                   // trying to backfill that slot from the invite
-                  // pool. So a decline here isn't really "part of the
-                  // match" anymore -- it reads the same as any other
-                  // open slot: no color, "Unas." behind the name,
-                  // same as a player who was simply never assigned.
+                  // pool. So a decline here doesn't get a color (it's
+                  // no longer occupying a real slot), but it's NOT
+                  // the same as "Unas." either -- that label is
+                  // reserved for a player who was never assigned to
+                  // anything at all today. A decline is its own,
+                  // distinct, permanent history for that date: this
+                  // player WAS asked and said no.
                   const isSelfServeDecline = !!m && !!m.target_size && responseStatus === "declined";
                   const color = m
                     ? (isSelfServeDecline ? "" : matchColor[m.id])
@@ -545,7 +548,7 @@ export default function MatchMatrixPage() {
                         className={`block w-full whitespace-nowrap rounded px-1 py-0 leading-tight ${color} ${isOverloaded ? "ring-2 ring-orange-400" : ""} ${isSelected ? "outline outline-2 outline-purple-500" : ""} ${swapSlots.some((s) => s.playerId === p.id && s.date === d) ? "outline outline-2 outline-purple-600" : ""}`}
                       >
                         {isSelfServeDecline
-                          ? `${p.first_name} Unas.`
+                          ? `${p.first_name} declined`
                           : m
                           ? `${p.first_name} M${m.match_number} ${displayStatus}`
                           : isAvailUnassigned
@@ -579,8 +582,8 @@ export default function MatchMatrixPage() {
                           <div key={m.id} className={`rounded p-1 ${color}`}>
                             <div className="text-xs font-semibold">
                               M{m.match_number}
-                              {proposerDisplayName(m.proposer) && (
-                                <span className="font-normal text-stone-500"> — {proposerDisplayName(m.proposer)}</span>
+                              {proposerDisplayName(m.proposer, m.target_size) && (
+                                <span className="font-normal text-stone-500"> — {proposerDisplayName(m.proposer, m.target_size)}</span>
                               )}
                             </div>
                             <div className="mb-1">
@@ -668,8 +671,8 @@ export default function MatchMatrixPage() {
         <div className="w-72 space-y-1 rounded-md border bg-stone-50 p-3 text-sm">
           <p className="font-bold">
             M{selectedMatch.match_number}
-            {proposerDisplayName(selectedMatch.proposer) && (
-              <span className="font-normal text-stone-500"> — {proposerDisplayName(selectedMatch.proposer)}</span>
+            {proposerDisplayName(selectedMatch.proposer, selectedMatch.target_size) && (
+              <span className="font-normal text-stone-500"> — {proposerDisplayName(selectedMatch.proposer, selectedMatch.target_size)}</span>
             )}
           </p>
           <p>
@@ -731,11 +734,7 @@ export default function MatchMatrixPage() {
           {selectedMatch.match_players.map((mp: any) => (
             <p key={mp.id}>
               {mp.players ? `${mp.players.first_name} ${mp.players.last_name}` : 'Unknown Player'} :{" "}
-              {selectedMatch.status === "draft"
-                ? "DRAFT"
-                : selectedMatch.target_size && mp.response_status === "declined"
-                ? "LOOKING"
-                : mp.response_status.toUpperCase()}
+              {selectedMatch.status === "draft" ? "DRAFT" : mp.response_status.toUpperCase()}
             </p>
           ))}
 

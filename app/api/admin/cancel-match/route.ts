@@ -62,7 +62,7 @@ export async function POST(request: Request) {
         roster,
         cancelledAt,
         reason: "cancelled by the manager",
-        proposedByName: proposerDisplayName(match.proposer) ?? "Manager",
+        proposedByName: proposerDisplayName(match.proposer, match.target_size) ?? "Manager",
       });
       await sendEmail({ supabaseAdmin: admin, to: mp.players.email, subject, html });
       await notifyPlayer({
