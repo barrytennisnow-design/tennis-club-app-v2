@@ -18,3 +18,6 @@ tests/playwright-report/
 # Editor/OS cruft
 .DS_Store
 *.log
+
+.vercel
+.env*
