@@ -172,14 +172,14 @@ export default function AdminMatchesPage() {
                     {rosterPlayers.length === 0 ? (
                       "—"
                     ) : (
-                      <div className="space-y-0.5">
+                      <div className="space-y-0.5 whitespace-nowrap">
                         {rosterPlayers.map((mp: any, i: number) => {
                           const statusColorClass =
                             mp.response_status === "proposed" ? "font-bold text-red-600" :
                             mp.response_status === "accepted" ? "font-bold text-green-600" :
                             "text-stone-400";
                           return (
-                            <div key={mp.id ?? i}>
+                            <div key={mp.id ?? i} className="whitespace-nowrap">
                               {mp.players ? `${mp.players.first_name} ${mp.players.last_name}` : "Unknown Player"}
                               {m.status !== "draft" && (
                                 <span className={statusColorClass}> : {mp.response_status.toUpperCase()}</span>
