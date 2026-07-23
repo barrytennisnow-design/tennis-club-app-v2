@@ -231,7 +231,7 @@ export function selfServeInviteEmail({
     matchDate,
     timeSlot,
     courtName,
-    roster,
+    roster: roster.filter((p) => p.status.toLowerCase() === "accepted"),
     footerLines: [`match created by: ${proposedByName ?? "a club member"}`],
   });
 
