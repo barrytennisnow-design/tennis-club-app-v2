@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { createClient, createAdminClient } from "@/lib/supabaseServer";
+import { proposerDisplayName } from "@/lib/formatName";
 
 export async function GET(request: Request) {
   const { searchParams } = new URL(request.url);
@@ -43,5 +44,26 @@ export async function GET(request: Request) {
     .select("match_id, response_status, players(first_name, last_name, phone)")
     .in("match_id", ids);
 
-  return NextResponse.json({ roster: allRoster ?? [] });
+  // The player-facing "Your Matches" page previously tried to read
+  // matches.proposer (players!proposed_by) directly via the browser
+  // client, which is subject to RLS on the players table -- since a
+  // regular player generally can't read another player's row, that
+  // join silently came back null and the page fell back to "Manager"
+  // even for Build-a-Match matches proposed by a fellow player. Fetch
+  // it here instead, same as the roster above, via the admin client,
+  // so the player page can show the identical "Barry R. BAM4" style
+  // attribution the manager Matches page already shows.
+  const { data: matchRows } = await admin
+    .from("matches")
+    .select("id, target_size, proposer:players!proposed_by(first_name, last_name)")
+    .in("id", ids);
+
+  const matchInfo: Record<string, { proposedByName: string | null; acceptedCount: number; targetSize: number | null }> = {};
+  for (const m of matchRows ?? []) {
+    const proposer = Array.isArray(m.proposer) ? m.proposer[0] : m.proposer;
+    const acceptedCount = (allRoster ?? []).filter((r: any) => r.match_id === m.id && r.response_status === "accepted").length;
+    matchInfo[m.id] = { proposedByName: proposerDisplayName(proposer, m.target_size), acceptedCount, targetSize: m.target_size ?? null };
+  }
+
+  return NextResponse.json({ roster: allRoster ?? [], matchInfo });
 }

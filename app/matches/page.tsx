@@ -18,6 +18,7 @@ export default function MyMatchesPage() {
   const [player, setPlayer] = useState<any>(null);
   const [myMatches, setMyMatches] = useState<any[]>([]);
   const [rosterByMatch, setRosterByMatch] = useState<Record<string, any[]>>({});
+  const [matchInfo, setMatchInfo] = useState<Record<string, { proposedByName: string | null; acceptedCount: number; targetSize: number | null }>>({});
   const [timeDisplay, setTimeDisplay] = useState("morning");
   const [loading, setLoading] = useState(true);
   const [busyId, setBusyId] = useState<string | null>(null);
@@ -61,13 +62,14 @@ export default function MyMatchesPage() {
       if (matchIds.length > 0) {
         const response = await fetch(`/api/match-roster?match_ids=${matchIds.join(",")}`);
         if (response.ok) {
-          const { roster } = await response.json();
+          const { roster, matchInfo: fetchedMatchInfo } = await response.json();
           const grouped: Record<string, any[]> = {};
           for (const row of roster ?? []) {
             if (!grouped[row.match_id]) grouped[row.match_id] = [];
             grouped[row.match_id].push(row);
           }
           setRosterByMatch(grouped);
+          setMatchInfo(fetchedMatchInfo ?? {});
         }
       }
     }
@@ -112,9 +114,14 @@ export default function MyMatchesPage() {
         const roster = (rosterByMatch[mp.match_id] ?? []).filter(
           (r: any) => !shouldHideBamDecline(r.response_status, mp.matches.target_size, mp.matches.status)
         );
+        const info = matchInfo[mp.match_id];
         const deadline = mp.matches.proposed_at && mp.matches.auto_cancel_hours
           ? new Date(new Date(mp.matches.proposed_at).getTime() + mp.matches.auto_cancel_hours * 3600000)
           : null;
+        // Same "still moving" window as the manager Matches page and
+        // Match Matrix -- only worth showing an accepted-count badge
+        // while the Build-a-Match invite is still actively filling.
+        const isLiveBamMatch = !!mp.matches.target_size && mp.matches.status === "proposed";
 
         return (
           <div key={mp.id} id={`match-${mp.matches.id}`} className="scroll-mt-4 rounded-md border p-4">
@@ -131,7 +138,7 @@ export default function MyMatchesPage() {
             <p>Date: {formatLongDate(mp.matches.match_date)}</p>
             <p>Time: {mp.matches.time_display || timeDisplay}</p>
             <p>Court: {mp.matches.court?.name ?? "TBD"}</p>
-            <p>Proposed by: {proposerDisplayName(mp.matches.proposer, mp.matches.target_size) ?? "Manager"}</p>
+            <p>Proposed by: {info?.proposedByName ?? proposerDisplayName(mp.matches.proposer, mp.matches.target_size) ?? "Manager"}</p>
 
             <p className="mt-3 font-medium">Players:</p>
             <ul className="ml-4 list-disc space-y-0.5">
@@ -143,6 +150,11 @@ export default function MyMatchesPage() {
                 </li>
               ))}
             </ul>
+            {isLiveBamMatch && (
+              <p className="ml-4 text-xs text-stone-500">
+                {info?.acceptedCount ?? roster.filter((r: any) => r.response_status === "accepted").length}/{mp.matches.target_size} accepted
+              </p>
+            )}
 
             {mp.decline_reason && (
               <p className="mt-2 text-sm italic text-stone-500">Your reason: "{mp.decline_reason}"</p>
