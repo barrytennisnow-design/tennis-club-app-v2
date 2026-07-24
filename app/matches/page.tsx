@@ -141,14 +141,25 @@ export default function MyMatchesPage() {
             <p>Proposed by: {info?.proposedByName ?? proposerDisplayName(mp.matches.proposer, mp.matches.target_size) ?? "Manager"}</p>
 
             <p className="mt-3 font-medium">Players:</p>
-            <ul className="ml-4 list-disc space-y-0.5">
-              {roster.map((r: any, i: number) => (
-                <li key={i}>
-                  {r.players ? `${r.players.first_name} ${r.players.last_name}` : 'Unknown Player'}{" "}
-                  Status: <strong>{r.response_status.toUpperCase()}</strong>
-                  {r.players?.phone && <> | Phone: {formatPhone(r.players.phone)}</>}
-                </li>
-              ))}
+            <ul className="ml-4 list-none space-y-2">
+              {roster.map((r: any, i: number) => {
+                const statusUpper = r.response_status.toUpperCase();
+                const statusColorClass =
+                  statusUpper === "ACCEPTED" ? "text-green-700" :
+                  statusUpper === "PROPOSED" || statusUpper === "DECLINED" ? "text-red-700" :
+                  "text-stone-500";
+                return (
+                  <li key={i} className="border-b border-stone-100 pb-2 last:border-0 last:pb-0">
+                    <div className="font-semibold">
+                      {r.players ? `${r.players.first_name} ${r.players.last_name}` : 'Unknown Player'}
+                    </div>
+                    <div>
+                      Status: <strong className={statusColorClass}>{statusUpper}</strong>
+                    </div>
+                    {r.players?.phone && <div>Phone: {formatPhone(r.players.phone)}</div>}
+                  </li>
+                );
+              })}
             </ul>
             {isLiveBamMatch && (
               <p className="ml-4 text-xs text-stone-500">
