@@ -581,78 +581,90 @@ export default function MatchMatrixPage() {
                         const color = matchColor[m.id];
                         return (
                           <div key={m.id} className={`rounded p-1 ${color}`}>
-                            <div className="text-xs font-semibold">
+                            {/* Line 1: match number + who proposed (first name + last initial,
+                                same format as BAM matches, for every match once it has a proposer) */}
+                            <div className="min-h-[16px] text-xs font-semibold">
                               M{m.match_number}
                               {proposerDisplayName(m.proposer, m.target_size) && (
                                 <span className="font-normal text-stone-500"> — {proposerDisplayName(m.proposer, m.target_size)}</span>
                               )}
                             </div>
-                            <div className="mb-1">
+                            {/* Line 2: status */}
+                            <div className="mb-1 mt-1 min-h-[28px]">
                               <span className={`rounded-full px-1.5 py-0.5 text-[10px] font-medium ${MATCH_STATUS_STYLES[m.status] ?? "bg-stone-200 text-stone-700"}`}>
                                 {matchStatusLabel(m.status)}
                               </span>
+                              {m.target_size && m.status === "proposed" && (() => {
+                                const accepted = (m.match_players ?? []).filter((mp: any) => mp.response_status === "accepted").length;
+                                const stillNeeded = m.target_size - accepted;
+                                return stillNeeded > 0 ? (
+                                  <div className="mt-0.5 text-[10px] font-medium text-amber-700">
+                                    Self-serve — looking for {stillNeeded} more
+                                  </div>
+                                ) : null;
+                              })()}
                             </div>
-                            {m.target_size && m.status === "proposed" && (() => {
-                              const accepted = (m.match_players ?? []).filter((mp: any) => mp.response_status === "accepted").length;
-                              const stillNeeded = m.target_size - accepted;
-                              return stillNeeded > 0 ? (
-                                <div className="mb-1 text-[10px] font-medium text-amber-700">
-                                  Self-serve — looking for {stillNeeded} more
-                                </div>
-                              ) : null;
-                            })()}
-                            {m.status === "draft" ? (
-                              <select
-                                disabled={!hasPermission(access, "matrix_change_court")}
-                                className="w-full rounded border border-stone-300 px-1 py-0.5 text-xs disabled:bg-stone-100"
-                                defaultValue={m.court?.id ?? ""}
-                                onChange={(e) => handleInlineCourtChange(m.id, e.target.value)}
-                              >
-                                <option value="">Court TBD</option>
-                                {courtOptionsFor(m).map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
-                              </select>
-                            ) : (
-                              <div className="text-xs">{m.court?.name ?? "Court TBD"}</div>
-                            )}
-                            {m.status === "draft" ? (
-                              <select
-                                disabled={!hasPermission(access, "matrix_change_time")}
-                                className="w-full rounded border border-stone-300 px-1 py-0.5 text-xs mt-1 disabled:bg-stone-100"
-                                defaultValue={
-                                  !m.time_display
-                                    ? "__default__"
-                                    : timeSlotDescriptions.includes(m.time_display)
-                                    ? m.time_display
-                                    : "__custom__"
-                                }
-                                onChange={(e) => {
-                                  if (e.target.value !== "__custom__") handleInlineTimeChange(m.id, e.target.value);
-                                }}
-                              >
-                                <option value="__default__">Default ({defaultTimeDisplay})</option>
-                                {timeSlotDescriptions.map((t) => <option key={t} value={t}>{t}</option>)}
-                                <option value="__custom__">Custom...</option>
-                              </select>
-                            ) : (
-                              <div className="text-xs">{m.time_display || defaultTimeDisplay}</div>
-                            )}
-                            {m.status === "draft" ? (
-                              <button
-                                onClick={() => handleInlinePropose(m.id)}
-                                disabled={!hasPermission(access, "matrix_propose_match")}
-                                className="mt-1 w-full rounded bg-court-green px-2 py-0.5 text-xs text-white disabled:opacity-40"
-                              >
-                                PROPOSE
-                              </button>
-                            ) : (
-                              <button
-                                onClick={() => handleInlineCancel(m.id)}
-                                disabled={!hasPermission(access, "matrix_cancel_match")}
-                                className="mt-1 w-full rounded border border-red-300 px-2 py-0.5 text-xs text-red-700 disabled:opacity-40"
-                              >
-                                CANCEL
-                              </button>
-                            )}
+                            {/* Line 3: location (court) */}
+                            <div className="min-h-[24px]">
+                              {m.status === "draft" ? (
+                                <select
+                                  disabled={!hasPermission(access, "matrix_change_court")}
+                                  className="w-full rounded border border-stone-300 px-1 py-0.5 text-xs disabled:bg-stone-100"
+                                  defaultValue={m.court?.id ?? ""}
+                                  onChange={(e) => handleInlineCourtChange(m.id, e.target.value)}
+                                >
+                                  <option value="">Court TBD</option>
+                                  {courtOptionsFor(m).map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
+                                </select>
+                              ) : (
+                                <div className="text-xs">{m.court?.name ?? "Court TBD"}</div>
+                              )}
+                            </div>
+                            {/* Line 4: start time */}
+                            <div className="mt-1 min-h-[24px]">
+                              {m.status === "draft" ? (
+                                <select
+                                  disabled={!hasPermission(access, "matrix_change_time")}
+                                  className="w-full rounded border border-stone-300 px-1 py-0.5 text-xs disabled:bg-stone-100"
+                                  defaultValue={
+                                    !m.time_display
+                                      ? "__default__"
+                                      : timeSlotDescriptions.includes(m.time_display)
+                                      ? m.time_display
+                                      : "__custom__"
+                                  }
+                                  onChange={(e) => {
+                                    if (e.target.value !== "__custom__") handleInlineTimeChange(m.id, e.target.value);
+                                  }}
+                                >
+                                  <option value="__default__">Default ({defaultTimeDisplay})</option>
+                                  {timeSlotDescriptions.map((t) => <option key={t} value={t}>{t}</option>)}
+                                  <option value="__custom__">Custom...</option>
+                                </select>
+                              ) : (
+                                <div className="text-xs">{m.time_display || defaultTimeDisplay}</div>
+                              )}
+                            </div>
+                            {/* Line 5: available action */}
+                            <div className="mt-1 min-h-[24px]">
+                              {m.status === "draft" ? (
+                                <button
+                                  onClick={() => handleInlinePropose(m.id)}
+                                  disabled={!hasPermission(access, "matrix_propose_match")}
+                                  className="w-full rounded bg-court-green px-2 py-0.5 text-xs text-white disabled:opacity-40"
+                                >
+                                  PROPOSE
+                                </button>
+                              ) : (
+                                <button
+                                  onClick={() => handleInlineCancel(m.id)}
+                                  disabled={!hasPermission(access, "matrix_cancel_match")}
+                                  className="w-full rounded border border-red-300 px-2 py-0.5 text-xs text-red-700 disabled:opacity-40"
+                                >
+                                  CANCEL
+                                </button>
+                              )}
+                            </div>
                           </div>
                         );
                       })}
