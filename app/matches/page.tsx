@@ -5,6 +5,7 @@ import { createClient } from "@/lib/supabaseClient";
 import { formatShortDate } from "@/lib/formatDate";
 import { formatPhone } from "@/lib/formatPhone";
 import { proposerDisplayName } from "@/lib/formatName";
+import { shouldHideBamDecline } from "@/lib/matchRoster";
 
 function formatLongDate(dateStr: string) {
   const d = new Date(dateStr + "T00:00:00");
@@ -108,7 +109,9 @@ export default function MyMatchesPage() {
       {myMatches.length === 0 && <p className="text-stone-500">No match invites yet.</p>}
 
       {myMatches.map((mp) => {
-        const roster = rosterByMatch[mp.match_id] ?? [];
+        const roster = (rosterByMatch[mp.match_id] ?? []).filter(
+          (r: any) => !shouldHideBamDecline(r.response_status, mp.matches.target_size, mp.matches.status)
+        );
         const deadline = mp.matches.proposed_at && mp.matches.auto_cancel_hours
           ? new Date(new Date(mp.matches.proposed_at).getTime() + mp.matches.auto_cancel_hours * 3600000)
           : null;

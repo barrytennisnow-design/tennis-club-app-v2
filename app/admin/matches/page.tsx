@@ -7,6 +7,7 @@ import { useMyAccess } from "@/lib/useMyAccess";
 import { hasPermission } from "@/lib/permissions";
 import { proposerDisplayName } from "@/lib/formatName";
 import { MATCH_STATUS_STYLES, matchStatusLabel } from "@/lib/matchStatus";
+import { shouldHideBamDecline } from "@/lib/matchRoster";
 
 export default function AdminMatchesPage() {
   const supabase = createClient();
@@ -144,18 +145,20 @@ export default function AdminMatchesPage() {
                 m.status === "proposed" ? "bg-yellow-50" :
                 m.status === "cancelled" ? "bg-red-50" :
                 "bg-stone-50";
-              // BAM (self-serve/target_size) matches while still
-              // "proposed" are a live, moving roster -- players get
-              // added as wave 2 gets promoted or someone accepts, and
-              // per the requested workflow a decline should just drop
+              // BAM (self-serve/target_size) matches are a live,
+              // moving roster while proposed -- players get added as
+              // wave 2 gets promoted or someone accepts -- and once
+              // confirmed, a decline was never actually part of the
+              // final match either (that slot just got backfilled by
+              // someone else). Either way a decline should just drop
               // that name from view here (no dead weight cluttering
-              // the "who do we still need" picture), unlike the Match
-              // Matrix's permanent per-day history which keeps
-              // declines visible. Confirmed/cancelled BAM matches, and
-              // every classic match, keep the full historical roster.
+              // "who's actually in this match"), matching the Match
+              // Matrix detail panel and the player's Your Matches
+              // page. Cancelled BAM matches keep the full history, and
+              // every classic match always keeps its full roster.
               const isLiveBamMatch = !!m.target_size && m.status === "proposed";
               const rosterPlayers = (m.match_players ?? [])
-                .filter((mp: any) => !(isLiveBamMatch && mp.response_status === "declined"))
+                .filter((mp: any) => !shouldHideBamDecline(mp.response_status, m.target_size, m.status))
                 .sort((a: any, b: any) => new Date(a.created_at ?? 0).getTime() - new Date(b.created_at ?? 0).getTime());
               const acceptedCount = (m.match_players ?? []).filter((mp: any) => mp.response_status === "accepted").length;
               return (

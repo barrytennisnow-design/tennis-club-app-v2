@@ -8,6 +8,7 @@ import { useMyAccess } from "@/lib/useMyAccess";
 import { hasPermission } from "@/lib/permissions";
 import { proposerDisplayName } from "@/lib/formatName";
 import { MATCH_STATUS_STYLES, matchStatusLabel } from "@/lib/matchStatus";
+import { shouldHideBamDecline } from "@/lib/matchRoster";
 
 function isoDaysFromNow(n: number) {
   const d = new Date();
@@ -731,12 +732,14 @@ export default function MatchMatrixPage() {
             <p>{selectedMatch.time_display || defaultTimeDisplay}</p>
           )}
 
-          {selectedMatch.match_players.map((mp: any) => (
-            <p key={mp.id}>
-              {mp.players ? `${mp.players.first_name} ${mp.players.last_name}` : 'Unknown Player'} :{" "}
-              {selectedMatch.status === "draft" ? "DRAFT" : mp.response_status.toUpperCase()}
-            </p>
-          ))}
+          {selectedMatch.match_players
+            .filter((mp: any) => !shouldHideBamDecline(mp.response_status, selectedMatch.target_size, selectedMatch.status))
+            .map((mp: any) => (
+              <p key={mp.id}>
+                {mp.players ? `${mp.players.first_name} ${mp.players.last_name}` : 'Unknown Player'} :{" "}
+                {selectedMatch.status === "draft" ? "DRAFT" : mp.response_status.toUpperCase()}
+              </p>
+            ))}
 
           <p className="font-semibold">STATUS: {selectedMatch.status.toUpperCase()}</p>
 
