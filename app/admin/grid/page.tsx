@@ -495,7 +495,7 @@ export default function MatchMatrixPage() {
               <th className="sticky left-[64px] z-10 bg-stone-100 px-2 py-0.5 text-left">Last</th>
               <th className="sticky left-[128px] z-10 bg-stone-100 px-1 py-0.5 text-left">Rank</th>
               {days.map((d) => (
-                <th key={d} className="whitespace-nowrap px-1.5 py-0.5 text-center font-normal">
+                <th key={d} className="min-w-[190px] whitespace-nowrap px-1.5 py-0.5 text-center font-normal">
                   {formatShortDateWithWeekday(d)}
                 </th>
               ))}
@@ -542,7 +542,7 @@ export default function MatchMatrixPage() {
                     ? "DRAFT"
                     : (responseStatus ? responseStatus.toUpperCase() : m?.status?.toUpperCase() || "");
                   return (
-                    <td key={d} className="p-0 text-center">
+                    <td key={d} className="min-w-[190px] p-0 text-center">
                       <button
                         disabled={!m && !isAvailUnassigned}
                         onClick={() => handleCellClick(p.id, d, m, isAvailUnassigned)}
@@ -575,7 +575,7 @@ export default function MatchMatrixPage() {
                 const dayMatches = matches.filter((m) => m.match_date === d);
                 const uniqueMatches = Array.from(new Map(dayMatches.map((m) => [m.id, m])).values());
                 return (
-                  <td key={d} className="p-1 align-top">
+                  <td key={d} className="min-w-[190px] p-1 align-top">
                     <div className="space-y-1">
                       {uniqueMatches.map((m) => {
                         const color = matchColor[m.id];
@@ -583,7 +583,7 @@ export default function MatchMatrixPage() {
                           <div key={m.id} className={`rounded p-1 ${color}`}>
                             {/* Line 1: match number + who proposed (first name + last initial,
                                 same format as BAM matches, for every match once it has a proposer) */}
-                            <div className="min-h-[16px] text-xs font-semibold">
+                            <div className="min-h-[16px] whitespace-nowrap text-xs font-semibold">
                               M{m.match_number}
                               {proposerDisplayName(m.proposer, m.target_size) && (
                                 <span className="font-normal text-stone-500"> — {proposerDisplayName(m.proposer, m.target_size)}</span>
@@ -617,7 +617,7 @@ export default function MatchMatrixPage() {
                                   {courtOptionsFor(m).map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
                                 </select>
                               ) : (
-                                <div className="text-xs">{m.court?.name ?? "Court TBD"}</div>
+                                <div className="whitespace-nowrap text-xs">{m.court?.name ?? "Court TBD"}</div>
                               )}
                             </div>
                             {/* Line 4: start time */}
@@ -642,7 +642,7 @@ export default function MatchMatrixPage() {
                                   <option value="__custom__">Custom...</option>
                                 </select>
                               ) : (
-                                <div className="text-xs">{m.time_display || defaultTimeDisplay}</div>
+                                <div className="whitespace-nowrap text-xs">{m.time_display || defaultTimeDisplay}</div>
                               )}
                             </div>
                             {/* Line 5: available action */}
