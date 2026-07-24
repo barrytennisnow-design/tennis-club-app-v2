@@ -8,7 +8,7 @@
 
 import { Resend } from "resend";
 import { formatShortDate, formatLongDateWithWeekday } from "./formatDate.ts";
-import { formatMatchDetailsText, type RosterEntry } from "./matchDetails.ts";
+import { formatMatchDetailsHtml, type RosterEntry } from "./matchDetails.ts";
 
 let resendClient: Resend | null = null;
 function getResend() {
@@ -131,7 +131,7 @@ export function matchProposedEmail({
   proposedByName?: string | null;
 }) {
   const displayDate = formatShortDate(matchDate);
-  const details = formatMatchDetailsText({
+  const detailsHtml = formatMatchDetailsHtml({
     matchNumber,
     statusLabel: "PROPOSED",
     matchDate,
@@ -148,7 +148,7 @@ export function matchProposedEmail({
     html: `
       <p>Hi ${firstName},</p>
       <p>You've been proposed for a match:</p>
-      <pre style="font-family:monospace;white-space:pre-wrap;font-size:13px;">${details}</pre>
+      ${detailsHtml}
       ${conflictNote ? `<p style="color:#b45309;"><strong>⚠️ Possible conflict:</strong> ${conflictNote}</p>` : ""}
       <p>Please accept or decline as soon as you can — the match will
       auto-cancel if everyone hasn't accepted in time.</p>
@@ -225,7 +225,7 @@ export function selfServeInviteEmail({
            first-come basis, it will be confirmed.</p>`;
   }
 
-  const details = formatMatchDetailsText({
+  const details = formatMatchDetailsHtml({
     matchNumber,
     statusLabel: `PROPOSED (BAM${targetSize})`,
     matchDate,
@@ -241,7 +241,7 @@ export function selfServeInviteEmail({
       <p>Hi ${firstName},</p>
       <p>${introLine}</p>
       ${explainerHtml}
-      <pre style="font-family:monospace;white-space:pre-wrap;font-size:13px;">${details}</pre>
+      ${details}
       ${conflictNote ? `<p style="color:#b45309;"><strong>⚠️ Possible conflict:</strong> ${conflictNote}</p>` : ""}
       <p>Please click below ASAP to accept this match -- spots go to whoever responds first.</p>
       <p><a href="${acceptUrl}" style="display:inline-block;padding:8px 16px;background:#2d5a3d;color:#ffffff;border-radius:6px;text-decoration:none;">Accept or Decline this Match</a></p>
@@ -317,7 +317,7 @@ export function matchConfirmedEmail({
   // if not, the link still works, Google Maps just asks the player
   // for a starting location instead of assuming one.
   const directionsUrl = courtAddress ? buildDirectionsUrl(courtAddress, playerAddress) : null;
-  const details = formatMatchDetailsText({
+  const details = formatMatchDetailsHtml({
     matchNumber,
     statusLabel: "CONFIRMED",
     matchDate,
@@ -335,7 +335,7 @@ export function matchConfirmedEmail({
     html: `
       <p>Hi ${firstName},</p>
       <p>Everyone accepted — your match is confirmed! 🎾</p>
-      <pre style="font-family:monospace;white-space:pre-wrap;font-size:13px;">${details}</pre>
+      ${details}
       ${
         directionsUrl || icsDownloadUrl
           ? `<p>${directionsUrl ? `<a href="${directionsUrl}" style="${buttonStyle}">Get Directions</a>` : ""}${
@@ -398,7 +398,7 @@ export function matchCancelledEmail({
   proposedByName?: string | null;
 }) {
   const displayDate = formatShortDate(matchDate);
-  const details = formatMatchDetailsText({
+  const details = formatMatchDetailsHtml({
     matchNumber,
     statusLabel: "CANCELLED",
     matchDate,
@@ -416,7 +416,7 @@ export function matchCancelledEmail({
       <p>Hi ${firstName},</p>
       <p>Your match has been cancelled. Reason: ${reason}</p>
       ${declineReason ? `<p>Reason given: "${declineReason}"</p>` : ""}
-      <pre style="font-family:monospace;white-space:pre-wrap;font-size:13px;">${details}</pre>
+      ${details}
       <p>Check your availability and matches page for updates.</p>
     `,
   };

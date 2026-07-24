@@ -402,8 +402,15 @@ export async function sendOverflowConfirmedEmails(admin: any, matchId: string): 
     .single();
   if (!updatedMatch) return;
 
-  const playerNames = updatedMatch.match_players.map((mp: any) => (mp.players ? `${mp.players.first_name} ${mp.players.last_name}` : "Unknown"));
-  const roster = updatedMatch.match_players.map((mp: any) => ({
+  // withdrawRemainingInvites only deletes rows still sitting at
+  // "proposed" (never-responded invitees). Anyone who actively
+  // declined stays in match_players for the record, but they never
+  // ended up in the match -- so the CONFIRMED email/roster/ics and
+  // its recipient list should only include players who accepted.
+  const acceptedMatchPlayers = updatedMatch.match_players.filter((mp: any) => mp.response_status === "accepted");
+
+  const playerNames = acceptedMatchPlayers.map((mp: any) => (mp.players ? `${mp.players.first_name} ${mp.players.last_name}` : "Unknown"));
+  const roster = acceptedMatchPlayers.map((mp: any) => ({
     name: mp.players ? `${mp.players.first_name} ${mp.players.last_name}` : "Unknown Player",
     status: mp.response_status,
     phone: mp.players?.phone ?? null,
@@ -428,7 +435,7 @@ export async function sendOverflowConfirmedEmails(admin: any, matchId: string): 
   const siteUrl = process.env.NEXT_PUBLIC_SITE_URL ?? "";
 
   const testMode = await getEmailTestModeSettings(admin);
-  const sortedMatchPlayers = [...updatedMatch.match_players].sort(
+  const sortedMatchPlayers = [...acceptedMatchPlayers].sort(
     (a: any, b: any) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime()
   );
   const emailRecipients = applyFirstOnlyFilter(sortedMatchPlayers, testMode);
