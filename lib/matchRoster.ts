@@ -28,3 +28,25 @@ export function shouldHideBamDecline(
   if (responseStatus !== "declined") return false;
   return matchStatus === "proposed" || matchStatus === "confirmed";
 }
+
+// The player's own "Your Matches" page wants a simpler picture than
+// the manager Matches page / Match Matrix: while a Build-a-Match
+// invite is proposed or confirmed, show ONLY the players who have
+// actually accepted -- not every candidate who's been asked (still-
+// pending "proposed" invites and declines alike). That "who's still
+// out for confirmation" detail belongs on the manager-facing pages;
+// a player just wants to know who they're actually playing with, plus
+// the "3/4 accepted" count shown alongside it. Classic manager-
+// assigned matches, and cancelled BAM matches (kept as full history),
+// are unaffected.
+export function shouldShowInPlayerRoster(
+  responseStatus: string | null | undefined,
+  targetSize: number | null | undefined,
+  matchStatus: string | null | undefined
+): boolean {
+  if (!targetSize) return true;
+  if (matchStatus === "proposed" || matchStatus === "confirmed") {
+    return responseStatus === "accepted";
+  }
+  return true;
+}

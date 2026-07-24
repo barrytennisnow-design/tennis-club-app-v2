@@ -5,7 +5,7 @@ import { createClient } from "@/lib/supabaseClient";
 import { formatShortDate } from "@/lib/formatDate";
 import { formatPhone } from "@/lib/formatPhone";
 import { proposerDisplayName } from "@/lib/formatName";
-import { shouldHideBamDecline } from "@/lib/matchRoster";
+import { shouldShowInPlayerRoster } from "@/lib/matchRoster";
 
 function formatLongDate(dateStr: string) {
   const d = new Date(dateStr + "T00:00:00");
@@ -112,7 +112,7 @@ export default function MyMatchesPage() {
 
       {myMatches.map((mp) => {
         const roster = (rosterByMatch[mp.match_id] ?? []).filter(
-          (r: any) => !shouldHideBamDecline(r.response_status, mp.matches.target_size, mp.matches.status)
+          (r: any) => shouldShowInPlayerRoster(r.response_status, mp.matches.target_size, mp.matches.status)
         );
         const info = matchInfo[mp.match_id];
         const deadline = mp.matches.proposed_at && mp.matches.auto_cancel_hours
