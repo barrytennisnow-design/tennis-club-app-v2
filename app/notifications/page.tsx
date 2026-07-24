@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabaseClient";
-import { enablePush, disablePush, isPushEnabledOnThisDevice, listenForForegroundPush } from "@/lib/notificationsClient";
+import { enablePush, disablePush, isPushEnabledOnThisDevice, listenForForegroundPush, notifyNotificationsChanged } from "@/lib/notificationsClient";
 
 const TYPE_ICON: Record<string, string> = {
   match_proposed: "🎾",
@@ -96,6 +96,7 @@ export default function NotificationsPage() {
   async function markRead(id: string) {
     setNotifications((prev) => prev.map((n) => (n.id === id ? { ...n, read_at: n.read_at ?? new Date().toISOString() } : n)));
     await supabase.from("notifications").update({ read_at: new Date().toISOString() }).eq("id", id).is("read_at", null);
+    notifyNotificationsChanged();
   }
 
   async function markAllRead() {
@@ -103,11 +104,13 @@ export default function NotificationsPage() {
     if (unreadIds.length === 0) return;
     setNotifications((prev) => prev.map((n) => (n.read_at ? n : { ...n, read_at: new Date().toISOString() })));
     await supabase.from("notifications").update({ read_at: new Date().toISOString() }).in("id", unreadIds);
+    notifyNotificationsChanged();
   }
 
   async function dismiss(id: string) {
     setNotifications((prev) => prev.filter((n) => n.id !== id));
     await supabase.from("notifications").delete().eq("id", id);
+    notifyNotificationsChanged();
   }
 
   function open(n: any) {

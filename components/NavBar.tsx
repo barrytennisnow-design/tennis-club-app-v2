@@ -1,10 +1,11 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabaseClient";
 import { useZoom, ZOOM_LEVELS } from "@/lib/zoomContext";
+import { onNotificationsChanged } from "@/lib/notificationsClient";
 
 export default function NavBar() {
   const supabase = createClient();
@@ -16,6 +17,7 @@ export default function NavBar() {
   const [loggedIn, setLoggedIn] = useState(false);
   const [selfServeOptIn, setSelfServeOptIn] = useState(false);
   const [unreadCount, setUnreadCount] = useState(0);
+  const refreshUnreadRef = useRef<() => void>(() => {});
 
   useEffect(() => {
     let unreadInterval: ReturnType<typeof setInterval> | null = null;
@@ -43,11 +45,19 @@ export default function NavBar() {
             .is("read_at", null);
           setUnreadCount(count ?? 0);
         };
+        refreshUnreadRef.current = refreshUnread;
         refreshUnread();
         // Lightweight polling rather than a realtime subscription --
         // good enough for a badge count, and avoids holding a socket
-        // open on every page for something this low-stakes.
+        // open on every page for something this low-stakes. The
+        // notifications-changed event (below) covers the common case
+        // of "I just read/dismissed something on THIS device" so the
+        // badge updates instantly; this interval is the fallback for
+        // everything else (a push arriving, another device, a nudge
+        // email response, etc.).
         unreadInterval = setInterval(refreshUnread, 60000);
+      } else {
+        refreshUnreadRef.current = () => {};
       }
     }
 
@@ -57,6 +67,7 @@ export default function NavBar() {
       setIsCaptain(false);
       setSelfServeOptIn(false);
       setUnreadCount(0);
+      refreshUnreadRef.current = () => {};
       if (unreadInterval) {
         clearInterval(unreadInterval);
         unreadInterval = null;
@@ -92,6 +103,14 @@ export default function NavBar() {
       sub.subscription.unsubscribe();
       if (unreadInterval) clearInterval(unreadInterval);
     };
+  }, []);
+
+  // Separate effect (mount-once, like the one above) so the listener
+  // itself never needs to be torn down/recreated as auth state
+  // changes -- it just always calls whatever refreshUnread is current
+  // via the ref.
+  useEffect(() => {
+    return onNotificationsChanged(() => refreshUnreadRef.current());
   }, []);
 
   async function handleLogoff() {

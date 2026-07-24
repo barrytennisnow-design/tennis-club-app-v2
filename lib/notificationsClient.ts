@@ -62,6 +62,29 @@ export async function isPushEnabledOnThisDevice(): Promise<boolean> {
   return Notification.permission === "granted";
 }
 
+// NavBar's unread-count badge polls the notifications table every 60s
+// (see components/NavBar.tsx) -- fine as a fallback/consistency
+// check, but it means marking something read or dismissing it on the
+// Notifications page didn't visibly update the badge for up to a
+// minute, which read as "stuck" until the next full page load
+// (login, or a new deployment) finally remounted NavBar and re-fetched.
+// This is a plain same-tab event bus (no server round trip, no extra
+// deps) that lets any page which just changed a notification's
+// read/deleted state tell NavBar to refetch its count right now.
+const NOTIFICATIONS_CHANGED_EVENT = "club-tennis:notifications-changed";
+
+export function notifyNotificationsChanged() {
+  if (typeof window === "undefined") return;
+  window.dispatchEvent(new Event(NOTIFICATIONS_CHANGED_EVENT));
+}
+
+// Returns an unsubscribe function -- call it from a useEffect cleanup.
+export function onNotificationsChanged(handler: () => void): () => void {
+  if (typeof window === "undefined") return () => {};
+  window.addEventListener(NOTIFICATIONS_CHANGED_EVENT, handler);
+  return () => window.removeEventListener(NOTIFICATIONS_CHANGED_EVENT, handler);
+}
+
 // Foreground messages (app open and focused) don't need an OS-level
 // notification -- the person's already looking at the app, so this
 // just re-fetches whatever's already listening for unread-count
